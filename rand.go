@@ -3,6 +3,7 @@ package prng
 import (
 	"sync"
 	"time"
+	// "math/bits"
 )
 
 // Random state sizes in bytes.
@@ -143,6 +144,18 @@ func (r *Rand) Float64() float64 {
 	return r.rng.Float64()
 }
 
+// Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// The distribution of the returned float64's is 6.5 x denser than in Float64.
+func (r *Rand) Float64_64() float64 {
+	return r.rng.Float64_64()
+}
+
+// Float64_1024 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// The distribution of the returned float64's is all the normal float64's in [0, 1).
+func (r *Rand) Float64_1024() float64 {
+	return r.rng.Float64_1024()
+}
+
 // Uint64 returns a pseudo-random uint64.
 func (r *Rand) Uint64() uint64 {
 	return r.rng.Uint64()
@@ -278,17 +291,5 @@ func OverlapProbability(n, L, P float64) (lower, upper float64){
 	return
 }
 
-// Baseline128 is for benchmarking minimal 128-bit state generator.
-func (x *Xoro) Baseline128() uint64 {
-	next := x.s0
-	*x = Xoro{x.s1, x.s0}
-	return next
-}
 
-// Baseline256 is for benchmarking minimal 256-bit state generator.
-func (x *Xosh) Baseline256() uint64 {
-	next := x.s0
-	*x = Xosh{x.s3, x.s0, x.s1, x.s2}
-	return next
-}
 
