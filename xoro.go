@@ -68,7 +68,7 @@ func (x *Xoro) Xoroshiro128plus() (next uint64) {
 
 // NextState returns the next Xoro state of the xoroshiro128+/** linear engine.
 func (x Xoro) NextState() Xoro {
-	//gc compiler detects similar expressions if given in parentheses
+	//gc compiler detects similar expressions if given in parentheses.
 
 	return Xoro{
 		s0: bits.RotateLeft64(x.s0, 24) ^ (x.s0 ^ x.s1) ^ ((x.s0 ^ x.s1) << 16),
