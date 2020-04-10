@@ -166,9 +166,9 @@ resample:
 	return float64(hi) / (1<<53) / pow / float64(uint64(1 << zeros))
 }
 
-// Float64Bisect returns a pseudo-random float64 from the complete 
-// uniform distribution of floats in [0, 1).
-func (x *Xoro) Float64Bisect() float64 {
+// Float64Bisect returns a pseudo-random float64 from the complete uniform distribution of floats in [0, 1).
+// If round == true, rounding is applied.
+func (x *Xoro) Float64Bisect(round bool) float64 {
 
 	left, mean, right := 0.0, 0.5, 1.0
 	for {
@@ -182,6 +182,15 @@ func (x *Xoro) Float64Bisect() float64 {
 			u <<= 1
 			mean = (left + right) / 2
 			if mean == left || mean == right {	// right - left = 1 ULP
+				if !round {
+					return left					// no rounding
+				}
+				if b == 63 {
+					u = x.Uint64()
+				}
+				if u & (1<<63) != 0 {			// '1' bit -> round up
+					return right								
+				} 
 				return left
 			}
 		}
