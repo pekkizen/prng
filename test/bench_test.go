@@ -4,10 +4,10 @@ import (
 	"math/bits"
 	"testing"
 	"math/rand"
-	// "math"
 
-	. "prng"
-	// . "github.com/pekkizen/prng"
+
+	// . "prng"
+	. "github.com/pekkizen/prng"
 	"github.com/MichaelTJones/pcg"
 	exprand "github.com/golang/exp/rand"
 	vpxyz "github.com/vpxyz/xorshift/xoroshiro256plus"

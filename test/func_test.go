@@ -6,8 +6,8 @@ import (
 	"testing"
 	"io/ioutil"
 
-	. "prng"
-	// . "github.com/pekkizen/prng"
+	// . "prng"
+	. "github.com/pekkizen/prng"
 )
 
 func abs(x float64) float64 {
