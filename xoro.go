@@ -83,19 +83,15 @@ func (x *Xoro) Float64() float64 {
 }
 
 // Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// The distribution of the returned float64's is 6.5 x denser than in Float64.
+// The distribution is 6.5 x denser than in Float64.
 func (x *Xoro) Float64_64() float64 {
 
 	return Float64_64(x.Uint64()) 
 }
-// Float64_64R returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// Float64_64R returns a uniformly distributed pseudo-random float64 from [0, 1] using rounding.
 func (x *Xoro) Float64_64R() float64 {
 
-	f := Float64_64R(x.Uint64())
-	for f == 1 {
-		f = Float64_64R(x.Uint64())
-	}
-	return f
+	return Float64_64R(x.Uint64())
 }
 
 var scale = [11]float64 {
@@ -106,25 +102,25 @@ var scale = [11]float64 {
 func Float64_64(u uint64) float64 {
 	
 	zeros := uint64(bits.LeadingZeros64(u))
-	if zeros >= 11 {
+	if zeros > 10 {
 		return float64(u) / (1<<64) 
 	}
 	return float64((u << zeros) >> 11) / scale[zeros]
 }
 
-// Float64_64R --
+// Float64_64R transforms the given 64-bit value to a float64 in [0, 1) using rounding.
 func Float64_64R(u uint64) float64 {
 	
 	zeros := uint64(bits.LeadingZeros64(u))
-	if zeros >= 11 {
+	if zeros > 10 {
 		return float64(u) / (1<<64) 
 	}
 	//add 1 to a 54-bit value and truncate to a 53-bit value
-	return float64(((u << zeros) >> 10 + 1) >> 1 ) /  scale[zeros]
+	return float64(((u << zeros) >> 10 + 1) >> 1) /  scale[zeros]
 }
 
-// Float64_1024 returns a pseudo-random float64 value from the uniform distribution of
-// of all normal floats in [0, 1).
+// Float64_1024  returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// All IEEE 754 normal floats are included.
 func (x *Xoro) Float64_1024() float64 {
 
 	hi := x.Uint64()
@@ -140,18 +136,16 @@ func (x *Xoro) Float64_1024() float64 {
 	zeros := uint64(bits.LeadingZeros64(hi))
 	hi = (hi << zeros) | (lo >> (64 - zeros))
 	return float64(hi >> 11) / (1<<53) / pow / float64(uint64(1 << zeros))
+
 }
 
-// Float64_1024R --
+// Float64_1024R returns a uniformly distributed pseudo-random float64 value in [0, 1] using rounding.
+// All IEEE 754 normal floats are included.
 func (x *Xoro) Float64_1024R() float64 {
 
-resample:
 	hi := x.Uint64()
 	if hi >= 1<<53 {  //99.9% of cases. Float64_1024 hi >= 1<<52
 		f := Float64_64R(hi)
-		if f == 1 {
-			goto resample
-		}
 		return f
 	} 
 	pow := 1.0
@@ -162,18 +156,19 @@ resample:
 	lo := x.Uint64()
 	zeros := uint64(bits.LeadingZeros64(hi))
 	hi = (hi << zeros) | (lo >> (64 - zeros))
-	hi = (hi >> 10 + 1) >> 1  
-	return float64(hi) / (1<<53) / pow / float64(uint64(1 << zeros))
+	return float64((hi >> 10 + 1) >> 1) / (1<<53) / pow / float64(uint64(1 << zeros))
 }
 
 // Float64Bisect returns a pseudo-random float64 from the complete uniform distribution of floats in [0, 1).
-// If round == true, rounding is applied.
+// If round == true, rounding is applied and the range is [0, 1].
+// All floats, normal and subnormal) are included.
 func (x *Xoro) Float64Bisect(round bool) float64 {
 
 	left, mean, right := 0.0, 0.5, 1.0
 	for {
 		u := x.Uint64()
 		for b := 0; b < 64; b++ {
+
 			if u & (1<<63) != 0 {
 				left = mean						// '1' bit -> take the right half, big numbers			
 			} else {
@@ -197,18 +192,15 @@ func (x *Xoro) Float64Bisect(round bool) float64 {
 	}
 }
 
-// Float64RandomReal returns a uniformly distributed pseudo-random float64 value in [0, 1].
+// RandomReal returns a uniformly distributed pseudo-random float64 value in [0, 1].
+// All IEEE 754 normal floats are included.
 // http://prng.di.unimi.it/random_real.c
 // This version returns 0 after 1024 leading zeros.
-func (x *Xoro) Float64RandomReal() float64 {
-	again:
+func (x *Xoro) RandomReal() float64 {
+
 	hi := x.Uint64()
 	if hi >= 1<<63 { //50% of the cases
-		f := float64(hi | 1) / (1<<64) 
-		if f == 1 {
-			goto again
-		}
-		return f
+		return float64(hi | 1) / (1<<64) 
 	}
 	pow := 1.0
 	for hi == 0 { 
