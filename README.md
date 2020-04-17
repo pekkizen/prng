@@ -38,7 +38,7 @@ xoroshiro128+ and **  have the same linear engine. Also xoshiro256+ and **.
 So, the same random state receiver variable can used for floats and uints without
 disturbing random stream properties. The generators can be used as a random source 
 for github.com/golang/exp/rand. Functions for random floating-point numbers are
-presented in the document unifloat.md.
+documented in https://github.com/pekkizen/prng/wiki/floats.
 
 
 ### Benchmarking generator speeds
@@ -69,7 +69,7 @@ func (x *Xoro) Baseline128() uint64 {
 | (1) Baseline128               | 0.45    |    
 | (1) Baseline256               | 0.71    |        
 | (1) NextState128              | 0.87    |  
-| (1) NextState256              | 1.08    | 
+| (1) NextState256              | 1.08    |       
 
 #### Time (ns) to generate an uint64 
 |     Generator                 | Time    | 
@@ -324,7 +324,20 @@ func Intn(n int) int
 ```Go
 func Float64() float64
     Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+    The distribution is 2^53 evenly spaced floats.
     
+```
+```Go
+func Float64_64() float64
+    Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+    The distribution is 6.5 x denser than in Float64.
+    It includes all floats in [2^-12, 1) and 2^52 evenly spaced floats in [0, 2^-12).
+    
+```
+```Go
+func Float64_1024() float64
+    Float64_1024 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+    The distribution includes all floats in [2^-1024, 1) and  0.
 ```
 
 #### Random number generator functions and methods
