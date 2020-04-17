@@ -78,30 +78,28 @@ func (x Xoro) NextState() Xoro {
 }
 
 // Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// The distribution is  2^53 evenly spaced floats.
 func (x *Xoro) Float64() float64 {
 
 	return float64(x.Xoroshiro128plus() >> 11) / (1<<53)
 }
 
 // Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// All floats in [2^-12, 1) are included and in [0, 2^-12) 2^52 evenly spaced floats 
+// The distribution includes all floats in [2^-12, 1) and  2^52 evenly spaced floats in [0, 2^-12).
 func (x *Xoro) Float64_64() float64 {
 
-	return Float64_64(x.Uint64()) 
+	return float64_64(x.Uint64()) 
 }
 
 // Float64_64R returns a uniformly distributed pseudo-random float64 from [0, 1] using rounding.
+// The distribution includes all floats in [2^-12, 1) and  2^52 evenly spaced floats in [0, 2^-12).
 func (x *Xoro) Float64_64R() float64 {
 
-	return Float64_64R(x.Uint64())
+	return float64_64Round(x.Uint64())
 }
 
-var scale = [11]float64 {
-	1<<53, 1<<54, 1<<55, 1<<56, 1<<57, 1<<58, 
-	1<<59, 1<<60, 1<<61, 1<<62, 1<<63, 
-}
-// Float64_64 transforms the given 64-bit value to a float64 in [0, 1).
-func Float64_64(u uint64) float64 {
+// float64_64 transforms the given 64-bit value to a float64 in [0, 1).
+func float64_64(u uint64) float64 {
 
 	z := uint64(bits.LeadingZeros64(u)) + 1
 	if z <= 11 {  
@@ -110,34 +108,24 @@ func Float64_64(u uint64) float64 {
 	return float64(u) / (1<<64) 
 }
 
-// Float64_64Algo transforms the given 64-bit value to a float64 in [0, 1).
-func Float64_64Algo(u uint64) float64 {
-
-	z := uint64(bits.LeadingZeros64(u))
-	if z <= 10 {  
-		return float64((u << z) >> 11) / scale[z]  
-	}
-	return float64(u) / (1<<64) 
-}
-
-// Float64_64R transforms the given 64-bit value to a float64 in [0, 1] using rounding.
-// Rounding: add 1 to a 54-bit value and truncate to a 53-bit value
-func Float64_64R(u uint64) float64 {
+// float64_64Round transforms the given 64-bit value to a float64 in [0, 1] using rounding.
+// Rounding: add 1 to a 53-bit value and truncate to a 52-bit value
+func float64_64Round(u uint64) float64 {
 	
-	z := uint64(bits.LeadingZeros64(u))
-	if z <= 10 { 
-		return float64(((u << z) >> 10 + 1) >> 1) / scale[z]	
+	z := uint64(bits.LeadingZeros64(u)) + 1
+	if z <= 11 { 
+		return math.Float64frombits((1023 - z) << 52 | ((u << z) >> 11 + 1) >> 1)
 	}
 	return float64(u) / (1<<64) 
 }
 
 // Float64_1024  returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// All IEEE 754 normal floats are included.
+// The distribution includes all floats in [2^-1024, 1) and  0.
 func (x *Xoro) Float64_1024() float64 {
 
 	hi := x.Uint64()
 	if hi >= 1<<52 {  //99.95% of cases 
-		return Float64_64(hi)
+		return float64_64(hi)
 	} 
 	pow := 1.0
 	for hi == 0 { 
@@ -151,13 +139,13 @@ func (x *Xoro) Float64_1024() float64 {
 }
 
 // Float64_1024R returns a uniformly distributed pseudo-random float64 value in [0, 1] using rounding.
-// All IEEE 754 normal floats are included.
+// The distribution includes all floats in [2^-1024, 1] and  0.
+// Rounding: add 1 to a 54-bit value and truncate to a 53-bit value
 func (x *Xoro) Float64_1024R() float64 {
 
 	hi := x.Uint64()
-	if hi >= 1<<53 {  //max 10 zeros rounded by Float64_64R
-		f := Float64_64R(hi)
-		return f
+	if hi >= 1<<53 {  //max 10 zeros rounded by float64_64Round
+		return float64_64Round(hi)
 	} 
 	pow := 1.0
 	for hi == 0 { 
@@ -246,4 +234,25 @@ func (x *Xoro) Baseline128() uint64 {
 	return next
 }
 
+// functions without math.Float64frombits.
+var scale = [11]float64 {
+	1<<53, 1<<54, 1<<55, 1<<56, 1<<57, 1<<58, 
+	1<<59, 1<<60, 1<<61, 1<<62, 1<<63, 
+}
+func algoFloat64_64(u uint64) float64 {
+
+	z := uint64(bits.LeadingZeros64(u))
+	if z <= 10 {  
+		return float64((u << z) >> 11) / scale[z]  
+	}
+	return float64(u) / (1<<64) 
+}
+func algoFloat64_64R(u uint64) float64 {
+	
+	z := uint64(bits.LeadingZeros64(u))
+	if z <= 10 { 
+		return float64(((u << z) >> 10 + 1) >> 1) / scale[z]	
+	}
+	return float64(u) / (1<<64) 
+}
 
