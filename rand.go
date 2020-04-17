@@ -210,10 +210,21 @@ func Seed(seed uint64) {
 }
 
 // Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// The distribution is  2^53 evenly spaced floats.
 func Float64() float64 {
 	return globalRand.rng.Float64()
 }
+// Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// The distribution includes all floats in [2^-12, 1) and  2^52 evenly spaced floats in [0, 2^-12).
+func Float64_64() float64 {
+	return globalRand.rng.Float64_64()
+}
 
+// Float64_1024 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// The distribution includes all floats in [2^-1024, 1) and  0.
+func Float64_1024() float64 {
+	return globalRand.rng.Float64_1024()
+}
 // Uint64 returns a pseudo-random 64-bit value as an uint64
 func Uint64() uint64 {
 	return globalRand.rng.Uint64()
