@@ -4,6 +4,7 @@ import (
 	"math/bits"
 	"testing"
 	"math/rand"
+	"math"
 
 	"github.com/MichaelTJones/pcg"
 	exprand "github.com/golang/exp/rand"
@@ -16,7 +17,21 @@ var fsink float64
 var isink int
 var bsink []byte
 
-func workerBaseLine(i int, c chan float64) {
+// baseline128 is for benchmarking minimal 128-bit state generator.
+func (x *Xoro) baseline128() uint64 {
+	next := x.s0
+	*x = Xoro{x.s1, x.s0}
+	return next
+}
+
+// baseline256 is for benchmarking minimal 256-bit state generator.
+func (x *Xosh) baseline256() uint64 {
+	next := x.s0
+	*x = Xosh{x.s3, x.s0, x.s1, x.s2}
+	return next
+}
+
+func workerbaseline(i int, c chan float64) {
 	c <- float64(i)
 }
 func workerSeeded(i int, c chan float64) {
@@ -31,7 +46,7 @@ func work() float64 {
 	const workers = 1000000
 	c := make(chan float64, workers)
 	for i := 0; i < workers; i++ {
-		// go workerBaseLine(i, c)
+		// go workerbaseline(i, c)
 		// go workerSeeded(i, c)
 		go workerNonOverLap(c)
 	}
@@ -58,7 +73,7 @@ func BenchmarkBaseline128(b *testing.B) {
 	var y uint64
 	x := NewXoro(1)
 	for n := 0; n < b.N; n++ {
-		y = x.Baseline128()
+		y = x.baseline128()
 	}
 	usink = y
 }
@@ -66,7 +81,7 @@ func BenchmarkBaseline256(b *testing.B) {
 	var y uint64
 	x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
-		y = x.Baseline256()
+		y = x.baseline256()
 	}
 	usink = y
 }
@@ -178,30 +193,38 @@ func BenchmarkNext(b *testing.B) {
 
 //-----------------------------------------------------Float64--------//
 func BenchmarkFloat64Methods(b *testing.B) {
-	var y float64
+	// var y float64
+	y := math.Abs(1.0)
 	// var u uint64
-	// x := NewXoro(1)
+	x := NewXoro(1)
 	for n := 0; n < b.N; n++ {
-		y = Float64_64()
+		// y = Float64_64()
 		// y = Float64_1024()
 
-		// y = float64_64R(x.Uint64())
-		// y = float64_64(x.Uint64())
+		// y = float64_64Round(x.Uint64())
+		y = float64_64(x.Uint64())
+		// y = float64(x.Uint64() &^ (1<<63))
+		// y = float64(x.Uint64() | (1<<63))
+		// y = float64(x.Uint64())
+		// y = float64_64B(x.Uint64())
+
 		// u = x.Uint64() | (1 << 63)
-		// y = float64(u)
-		// y = float64((u >> 10 + 1) >> 1) / (1<<53) 
-		// y = float64(u | 1) / (1<<64)
+		// y = float64(u )												// 1.7
+		// y = float64(u & 1)											// 1.43
+		// y = float64((u >> 10 + 1) >> 1) / (1<<53) 					// 1.7
+		// y = float64(u | 1) / (1<<64)									// 2.0
+		// y = math.Float64frombits(1022 << 52 | (u >> 11 + 1) >> 1)	// 1.55
+		// y = math.Float64frombits(1022 << 52 | u >> 12)				// 1.40
 
 		// y = float64(x.Xoroshiro128plus() >> 11) / (1 << 53) 
-		// y = math.Float64frombits(0x3FF<<52| (x.Xoroshiro128plus() >> 12)) - 1
+		// y = math.Float64frombits(1023 << 52 | (x.Xoroshiro128plus() >> 12)) - 1
 	}
 	fsink = y
 }
 
 func BenchmarkFloat64_64(b *testing.B) {
 	var y float64
-	// x := NewXoro(1)
-	x := New(1)
+	x := NewXoro(1)
 	for n := 0; n < b.N; n++ {
 		// y = x.Float64_64R()
 		y = x.Float64_64()
@@ -213,6 +236,16 @@ func BenchmarkFloat64_1024(b *testing.B) {
 	x := NewXoro(1)
 	for n := 0; n < b.N; n++ {
 		y = x.Float64_1024()
+		// y = x.Float64_1024R()
+	}
+	fsink = y
+}
+func BenchmarkFloat64_117(b *testing.B) {
+	var y float64
+	x := NewXoro(1)
+	for n := 0; n < b.N; n++ {
+		y = x.Float64_117()
+		// y = x.Float64_117R()
 	}
 	fsink = y
 }

@@ -84,13 +84,6 @@ func (x Xosh) NextState() Xosh {
 	}
 }
 
-// Baseline256 is for benchmarking minimal 256-bit state generator.
-func (x *Xosh) Baseline256() uint64 {
-	next := x.s0
-	*x = Xosh{x.s3, x.s0, x.s1, x.s2}
-	return next
-}
-
 // Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
 // Float64 uses 53 high bits of xoshiro256+
 func (x *Xosh) Float64() (next float64) {

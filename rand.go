@@ -139,19 +139,28 @@ func (r *Rand) SetState(b []byte)  {
 	r.rng.SetState(b)
 }
 
-// Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
+// Float64 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution is 2^53 evenly spaced floats with spacing 2^-53.
 func (r *Rand) Float64() float64 {
 	return r.rng.Float64()
 }
 
-// Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// The distribution of the returned float64's is 6.5 x denser than in Float64.
+// Float64_64 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [2^-12, 1) and 2^52 evenly spaced
+// floats in [0, 2^-12) with spacing 2^-64.
 func (r *Rand) Float64_64() float64 {
 	return r.rng.Float64_64()
 }
 
-// Float64_1024 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// The distribution of the returned float64's is all the normal float64's in [0, 1).
+// Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1). 
+// The distribution includes all floats in [2^-65, 1) and 2^52 evenly spaced 
+// floats in [0, 2^-65) with spacing 2^-117.
+func (r *Rand) Float64_117() float64 {
+	return r.rng.Float64_117()
+}
+
+// Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [2^-1024, 1) and  0.
 func (r *Rand) Float64_1024() float64 {
 	return r.rng.Float64_1024()
 }
@@ -209,15 +218,23 @@ func Seed(seed uint64) {
 	globalRand.rng.Seed(seed)
 }
 
-// Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// The distribution is  2^53 evenly spaced floats.
+// Float64 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution is  2^53 evenly spaced floats with spacing 2^-53.
 func Float64() float64 {
 	return globalRand.rng.Float64()
 }
-// Float64_64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// The distribution includes all floats in [2^-12, 1) and  2^52 evenly spaced floats in [0, 2^-12).
+// Float64_64 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [2^-12, 1) and 2^52 evenly spaced 
+// floats in [0, 2^-12) with spacing 2^-64.
 func Float64_64() float64 {
 	return globalRand.rng.Float64_64()
+}
+
+// Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1). 
+// The distribution includes all floats in [2^-65, 1) and 2^52  evenly spaced 
+// floats in [0, 2^-65) with spacing 2^-117.
+func Float64_117() float64 {
+	return globalRand.rng.Float64_117()
 }
 
 // Float64_1024 returns a uniformly distributed pseudo-random float64 value in [0, 1).
@@ -242,9 +259,6 @@ func Int() int {
 
 // Uint64n returns a pseudo-random number in [0,n) as an uint64.
 func Uint64n(n uint64) uint64 {
-	if int64(n) <= 0 {
-		panic("invalid argument to Uint64n")
-	}
 	return globalRand.rng.Uint64() % n
 }
 
