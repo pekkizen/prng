@@ -2,6 +2,7 @@ package prng
 
 import (
 	"math/bits"
+	"math"
 	"unsafe"
 )
 
@@ -84,12 +85,59 @@ func (x Xosh) NextState() Xosh {
 	}
 }
 
-// Float64 returns a uniformly distributed pseudo-random float64 value in [0, 1).
-// Float64 uses 53 high bits of xoshiro256+
+// Float64 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes  2^53 evenly spaced floats with spacing 2^-53.
 func (x *Xosh) Float64() (next float64) {
 
 	return float64(x.Xoshiro256plus() >> 11) / (1<<53)
 }
+
+// Float64_64 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [2^-12, 1) and 2^52 evenly spaced 
+// floats in [0, 2^-12) with spacing 2^-64.
+func (x *Xosh) Float64_64() float64 {
+
+	u := x.Uint64()
+	if u == 0 { return 0 }  // without this min returned is 2^-65
+	z := uint64(bits.LeadingZeros64(u)) + 1
+	return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
+}
+
+// Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1). 
+// The distribution includes all floats in [2^-65, 1) and 2^52  evenly spaced 
+// floats in [0, 2^-65) with spacing 2^-117.
+func (x *Xosh) Float64_117() float64 {
+
+	u := x.Uint64()
+	z := uint64(bits.LeadingZeros64(u)) + 1
+	if z <= 12 {  
+		return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
+	}
+	z--
+    u = u << z | x.Uint64() >> (64 - z)
+    return float64(u >> 11) * math.Float64frombits((970 - z) << 52)
+}
+
+// Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1). 
+// The distribution includes all floats in [2^-1024, 1) and  0.
+func (x *Xosh) Float64_1024() float64 {
+
+	u := x.Uint64()
+	z := uint64(bits.LeadingZeros64(u)) + 1
+	if z <= 12 {  //need 52 bits, 99.95% of cases 
+		return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
+	}
+	z--
+	pow := 1.0
+	for u == 0 { 
+		u = x.Uint64() 
+		z = uint64(bits.LeadingZeros64(u))
+		pow *= 1<<64
+	}
+	u = u << z | x.Uint64() >> (64 - z)
+	return float64(u >> 11) / (1<<53) / pow / float64(uint64(1 << z))
+}
+
 
 // State returns the current binary state of the generator x as []byte.
 func (x *Xosh) State() []byte {

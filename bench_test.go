@@ -191,24 +191,34 @@ func BenchmarkNext(b *testing.B) {
 	usink = x.Uint64()
 }
 
+func BenchmarkLeadingZeros(b *testing.B) {
+	
+	var u uint64
+	x := NewXoro(1)
+	for n := 0; n < b.N; n++ {
+		u = x.Uint64() >> 10
+		u = uint64(bits.LeadingZeros64(u))
+		
+	usink = u
+	}
+}
+
 //-----------------------------------------------------Float64--------//
 func BenchmarkFloat64Methods(b *testing.B) {
 	// var y float64
 	y := math.Abs(1.0)
 	// var u uint64
-	x := NewXoro(1)
+	// x := NewXoro(1)
 	for n := 0; n < b.N; n++ {
 		// y = Float64_64()
 		// y = Float64_1024()
 
-		// y = float64_64Round(x.Uint64())
-		y = float64_64(x.Uint64())
 		// y = float64(x.Uint64() &^ (1<<63))
 		// y = float64(x.Uint64() | (1<<63))
 		// y = float64(x.Uint64())
-		// y = float64_64B(x.Uint64())
-
+	
 		// u = x.Uint64() | (1 << 63)
+	
 		// y = float64(u )												// 1.7
 		// y = float64(u & 1)											// 1.43
 		// y = float64((u >> 10 + 1) >> 1) / (1<<53) 					// 1.7
@@ -225,15 +235,20 @@ func BenchmarkFloat64Methods(b *testing.B) {
 func BenchmarkFloat64_64(b *testing.B) {
 	var y float64
 	x := NewXoro(1)
+	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
+        //  y = x.Float64_64()
+        // y = x.float64_64Div()
+        y = x.float64_64Tab()
 		// y = x.Float64_64R()
-		y = x.Float64_64()
 	}
 	fsink = y
 }
+
 func BenchmarkFloat64_1024(b *testing.B) {
 	var y float64
 	x := NewXoro(1)
+	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
 		y = x.Float64_1024()
 		// y = x.Float64_1024R()
@@ -243,6 +258,7 @@ func BenchmarkFloat64_1024(b *testing.B) {
 func BenchmarkFloat64_117(b *testing.B) {
 	var y float64
 	x := NewXoro(1)
+	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
 		y = x.Float64_117()
 		// y = x.Float64_117R()

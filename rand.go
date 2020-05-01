@@ -140,7 +140,7 @@ func (r *Rand) SetState(b []byte)  {
 }
 
 // Float64 returns a uniformly distributed pseudo-random float64 from [0, 1).
-// The distribution is 2^53 evenly spaced floats with spacing 2^-53.
+// The distribution includes 2^53 evenly spaced floats with spacing 2^-53.
 func (r *Rand) Float64() float64 {
 	return r.rng.Float64()
 }
@@ -152,9 +152,9 @@ func (r *Rand) Float64_64() float64 {
 	return r.rng.Float64_64()
 }
 
-// Float64_117 returns a uniformly distributed pseudo-random float64 from (0, 1). 
+// Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1). 
 // The distribution includes all floats in [2^-65, 1) and 2^52  evenly spaced 
-// floats in (0, 2^-65) with spacing 2^-117.
+// floats in [0, 2^-65) with spacing 2^-117.
 func (r *Rand) Float64_117() float64 {
 	return r.rng.Float64_117()
 }
@@ -164,7 +164,18 @@ func (r *Rand) Float64_117() float64 {
 func (r *Rand) Float64_1024() float64 {
 	return r.rng.Float64_1024()
 }
+// RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [2^-958, 1) and  0.
+func (r *Rand) RandomReal() float64 {
+	return r.rng.RandomReal()
+}
 
+// Float64Bisect returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats. Float64Bisect is a slow function only
+// for validating other functions distributions.
+func (r *Rand) Float64Bisect(round bool) float64 {
+	return r.rng.Float64Bisect(round)
+}
 // Uint64 returns a pseudo-random uint64.
 func (r *Rand) Uint64() uint64 {
 	return r.rng.Uint64()
@@ -242,6 +253,21 @@ func Float64_117() float64 {
 func Float64_1024() float64 {
 	return globalRand.rng.Float64_1024()
 }
+
+// RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [2^-958, 1) and  0.
+func RandomReal() float64 {
+	return globalRand.rng.RandomReal()
+}
+
+// Float64Bisect returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats. Float64Bisect is a slow function only
+// for validating other functions distributions.
+// if round is true, rounding is used.
+func Float64Bisect(round bool) float64 {
+	return globalRand.rng.Float64Bisect(round)
+}
+
 // Uint64 returns a pseudo-random 64-bit value as an uint64
 func Uint64() uint64 {
 	return globalRand.rng.Uint64()
@@ -287,7 +313,7 @@ func Splitmix(seed *uint64) uint64 {
 
 	*seed += 0x9e3779b97f4a7c15 //any seed is ok
 	z := *seed
-	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
 	z = (z ^ (z >> 27)) * 0x94d049bb133111eb
 	return z ^ (z >> 31)
 }
