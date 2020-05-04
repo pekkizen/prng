@@ -160,12 +160,12 @@ func (r *Rand) Float64_117() float64 {
 }
 
 // Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1).
-// The distribution includes all floats in [2^-1024, 1) and  0.
+// The distribution includes all floats in [2^-1023, 1) and  0.
 func (r *Rand) Float64_1024() float64 {
 	return r.rng.Float64_1024()
 }
 // RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
-// The distribution includes all floats in [2^-958, 1) and  0.
+// The distribution includes all floats in [2^-1023, 1) and  0.
 func (r *Rand) RandomReal() float64 {
 	return r.rng.RandomReal()
 }
@@ -249,13 +249,13 @@ func Float64_117() float64 {
 }
 
 // Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1).
-// The distribution includes all floats in [2^-1024, 1) and  0.
+// The distribution includes all floats in [2^-1023, 1) and  0.
 func Float64_1024() float64 {
 	return globalRand.rng.Float64_1024()
 }
 
 // RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
-// The distribution includes all floats in [2^-958, 1) and  0.
+// The distribution includes all floats in [2^-1023, 1) and  0.
 func RandomReal() float64 {
 	return globalRand.rng.RandomReal()
 }
