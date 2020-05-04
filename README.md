@@ -99,7 +99,7 @@ func (x *Xoro) Baseline128() uint64 {
 | (1) Float64/xoroshiro128+     | 1.34    |
 | (1) Float64/xoshiro256+       | 1.63    |
 | (1) Float64_64/xoroshiro128** | 2.50    |
-| (1) Float64_1024/xoroshiro128** | 2.60    |
+| (1) Float64_1024/xoroshiro128** | 2.50    |
 | math/rand rng.Float64()       | 2.88    |
 | (3) rng.Float64()             | 4.92    |
 
@@ -373,7 +373,7 @@ func Float64_117() float64
 ```Go
 func Float64_1024() float64
     Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1).
-    The distribution includes all floats in [2^-1024, 1) and 0.
+    The distribution includes all floats in [2^-1023, 1) and 0.
 ```
 
 ```Go
@@ -381,13 +381,13 @@ func Float64Bisect(round bool) float64
     Float64Bisect returns a uniformly distributed pseudo-random float64 from [0, 1).
     The distribution includes all floats. Float64Bisect is a slow function only
     for validating other functions distributions. If round is true,
-    rounding is used. 
+    rounding is used.
 ```
 
 ```Go
 func RandomReal() float64
     RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
-    The distribution includes all floats in [2^-958, 1) and  0.
+    The distribution includes all floats in [2^-1023, 1) and  0.
     http://prng.di.unimi.it/random_real.c
 ```
 
