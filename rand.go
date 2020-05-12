@@ -153,19 +153,21 @@ func (r *Rand) Float64_64() float64 {
 }
 
 // Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1). 
-// The distribution includes all floats in [2^-65, 1) and 2^52  evenly spaced 
+// The distribution includes all floats in [2^-65, 1) and 2^52 evenly spaced 
 // floats in [0, 2^-65) with spacing 2^-117.
 func (r *Rand) Float64_117() float64 {
 	return r.rng.Float64_117()
 }
 
-// Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1).
-// The distribution includes all floats in [2^-1023, 1) and  0.
-func (r *Rand) Float64_1024() float64 {
-	return r.rng.Float64_1024()
+// Float64full returns a uniformly distributed pseudo-random float64 from [0, 1).
+// The distribution includes all floats in [0, 1).
+func (r *Rand) Float64full() float64 {
+	return r.rng.Float64full()
 }
+
 // RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-1023, 1) and  0.
+// http://prng.di.unimi.it/random_real.c 
 func (r *Rand) RandomReal() float64 {
 	return r.rng.RandomReal()
 }
@@ -248,10 +250,10 @@ func Float64_117() float64 {
 	return globalRand.rng.Float64_117()
 }
 
-// Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1).
+// Float64full returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-1023, 1) and  0.
-func Float64_1024() float64 {
-	return globalRand.rng.Float64_1024()
+func Float64full() float64 {
+	return globalRand.rng.Float64full()
 }
 
 // RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).

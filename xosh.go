@@ -115,35 +115,50 @@ func (x *Xosh) Float64_117() float64 {
 	}
 	z--
     u = u << z | x.Uint64() >> (64 - z)
-    return float64(u >> 11) * math.Float64frombits((970 - z) << 52)
+	return float64(u >> 11) * twoToMinus(53 + z)
 }
 
-// Float64_1024 returns a uniformly distributed pseudo-random float64 from [0, 1). 
+// Float64full returns a uniformly distributed pseudo-random float64 from [0, 1). 
 // The distribution includes all floats in [2^-1024, 1) and  0.
-func (x *Xosh) Float64_1024() float64 {
+func (x *Xosh) Float64full() float64 {
 
 	u := x.Uint64()
 	z := uint64(bits.LeadingZeros64(u)) + 1
-	if z <= 12 {  //need 52 bits, 99.95% of cases 
+	if z <= 12 {                                 //99.95% of cases 
 		return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
 	}
 	z--
-	pow := 1.0
+	exp := uint64(0)
 	for u == 0 { 
 		u = x.Uint64() 
 		z = uint64(bits.LeadingZeros64(u))
-		pow *= 1<<64
+		exp += 64
+		if exp + z >= 1074 { return 0 }
 	}
 	u = u << z | x.Uint64() >> (64 - z)
-	return float64(u >> 11) / (1<<53) / pow / float64(uint64(1 << z))
+	z += exp
+	if z < 1022 {
+		return math.Float64frombits((1022 - z) << 52 | u << 1 >> 12)
+	}
+	return math.Float64frombits(u >> (exp - 1022) >> 12) // subnormals
 }
 
+
+// GetState puts the current state of the generator x in b.
+// GetState without allocations is faster than State().
+func (x *Xosh) GetState(b []byte)  {
+
+	// This expects a little endian cpu, eg. all amd64.
+	*(*uint64)(unsafe.Pointer(&b[ 0])) = bits.ReverseBytes64(x.s0)
+	*(*uint64)(unsafe.Pointer(&b[ 8])) = bits.ReverseBytes64(x.s1)
+	*(*uint64)(unsafe.Pointer(&b[16])) = bits.ReverseBytes64(x.s2)
+	*(*uint64)(unsafe.Pointer(&b[24])) = bits.ReverseBytes64(x.s3)
+}
 
 // State returns the current binary state of the generator x as []byte.
 func (x *Xosh) State() []byte {
 	var b[32]byte
 	
-	// This expects a little endian cpu, eg. all amd64.
 	*(*uint64)(unsafe.Pointer(&b[ 0])) = bits.ReverseBytes64(x.s0)
 	*(*uint64)(unsafe.Pointer(&b[ 8])) = bits.ReverseBytes64(x.s1)
 	*(*uint64)(unsafe.Pointer(&b[16])) = bits.ReverseBytes64(x.s2)
@@ -153,8 +168,8 @@ func (x *Xosh) State() []byte {
 
 // SetState sets the state of the generator x from the state in b []byte.
 func (x *Xosh) SetState(b []byte) {
-	if len(b) < 32 {
-		panic("Xosh SetState bytes < 32")
+	if len(b) < XoshStateSize {
+		panic("Xosh: not enough state bytes")
 	}
 	x.s0 = bits.ReverseBytes64(*(*uint64)(unsafe.Pointer(&b[ 0])))
 	x.s1 = bits.ReverseBytes64(*(*uint64)(unsafe.Pointer(&b[ 8])))
