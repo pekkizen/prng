@@ -6,8 +6,8 @@ import (
 	"unsafe"
 )
 
-// const tweakedUint = true
-const tweakedUint = false
+// const float64Test = true
+const float64Test = false
 
 // A Xoro with a xoroshiro prng implements a 64-bit generator with 128-bit state.
 // A Xoro is the den of the xoroshiros holding their two 64-bit eggs.
@@ -59,19 +59,19 @@ func (x *Xoro) Uint64() (next uint64) {
 
 	next = bits.RotateLeft64(x.s0 * 5, 7) * 9
 	*x = x.NextState()
-	if tweakedUint {
+	if float64Test {
 		if next % 2 == 0 {
 			return 0
 		}
 		if next % 3 == 0 {
-			return next >> (next % 65)
+			return next >> (next % 64)
 		}
 		if next % 5 == 0 {
-			return next << (next % 65)
+			return next << (next % 64)
         }
         if next % 7 == 0 {
             //this catches rounding differencies
-			return ((1<<64) - 1) >> ((next>>5) % 64)
+			return ((1<<64) - 1) >> (next % 64)
 		}
 	}
 	return
@@ -149,6 +149,7 @@ func (x *Xoro) Float64_64R() float64 {
 	if u == 0 { return 0 }
 	z := uint64(bits.LeadingZeros64(u)) + 1
 	return math.Float64frombits((((1023 - z) << 53 | u << z >> 11) + 1) >> 1)
+	// return math.Float64frombits((1023 - z) << 52 | (u << z >> 11 + 1) >> 1) // wrong
 }
 
 // Float64full returns a uniformly distributed pseudo-random float64 from [0, 1). 
@@ -201,6 +202,12 @@ func (x *Xoro) Float64fullR() float64 {
 	return math.Float64frombits((u >> (z - 1022) >> 11 + 1) >> 1)
 }
 
+// twoToMinus(n) returns 2^-n as a float64.
+func twoToMinus(n uint64) float64 {
+	n  = (1023 - n) << 52
+	return *(*float64)(unsafe.Pointer(&n))
+}
+
 // Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1). 
 // The distribution includes all floats in [2^-65, 1) and 2^52 evenly spaced 
 // floats in [0, 2^-65) with spacing 2^-117.
@@ -214,12 +221,6 @@ func (x *Xoro) Float64_117() float64 {
 	z--
 	u = u << z | x.Uint64() >> (64 - z)
 	return float64(u >> 11) * twoToMinus(53 + z)
-}
-
-// twoToMinus(n) returns 2^-n as a float64.
-func twoToMinus(n uint64) float64 {
-	n  = (1023 - n) << 52
-	return *(*float64)(unsafe.Pointer(&n))
 }
 
 // Float64_117R returns a uniformly distributed pseudo-random float64 from 
