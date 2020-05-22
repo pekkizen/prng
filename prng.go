@@ -21,7 +21,7 @@ type Prng struct {
 	rng Xoro // xoroshiro128+/** generator
 }
 
-// New returns a new Rand seeded with the seed.
+// New returns a new Prng seeded with the seed.
 func New(seed uint64) Prng {
 	r := Prng{}
 	r.rng.Seed(seed)
@@ -40,7 +40,7 @@ type Outlet struct {
 	mu   sync.Mutex
 	xoro Xoro
 	xosh Xosh
-	rand Prng
+	rng Prng
 }
 
 // NewOutlet returns a new generator delivery Outlet seeded by the seed.
@@ -48,19 +48,19 @@ func NewOutlet(seed uint64) *Outlet {
 	s := &Outlet{}
 	s.xoro.Seed(seed)
 	s.xosh.Seed(seed)
-	s.rand.Seed(seed)
+	s.rng.Seed(seed)
 	return s
 }
 
-// Next returns the next Rand from Outlet. Each Rand has 2^64 long
+// Next returns the next rng from Outlet. Each rng has 2^64 long
 // random stream, which is not overlapping with other Rands streams.
 // Next is safe for concurrent use by multiple goroutines.
 func (s *Outlet) Next() Prng {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.rand.Jump()
-	return s.rand
+	s.rng.Jump()
+	return s.rng
 }
 
 // globalOutlet is a delivery type of generators without creating an own Outlet.
@@ -82,7 +82,7 @@ func ResetGlobalOutlet(seed uint64) {
 	})
 }
 
-// Next returns the next non-overlapping stream Rand from globalOutlet.
+// Next returns the next non-overlapping stream Prng from globalOutlet.
 // Next is safe for concurrent use by multiple goroutines.
 func Next() Prng {
 	return global.outlet.Next()
@@ -101,7 +101,7 @@ func NextXoro() Xoro {
 }
 
 // NewPrngSlice returns a slice of n Rands with non-overlapping
-// random streams. The first Rand is seeded by seed.
+// random streams. The first Prng is seeded by seed.
 func NewPrngSlice(n int, seed uint64) []Prng {
 	s := make([]Prng, n)
 	s[0].Seed(seed)
@@ -112,10 +112,10 @@ func NewPrngSlice(n int, seed uint64) []Prng {
 	return s
 }
 
-// A Rand's rng has methods Float64, Uint64, Jump and Seed.
-// Rand & math/rand functions are defined below.
+// A Prng's rng has methods Float64, Uint64, Jump and Seed.
+// Prng & math/rand functions are defined below.
 
-// Seed seeds a Rand by the seed. Any seed is ok.
+// Seed seeds a Prng by the seed. Any seed is ok.
 // Do not seed Rands created by Next or NewPrngSlice.
 func (r *Prng) Seed(seed uint64) {
 	r.rng.Seed(seed)
