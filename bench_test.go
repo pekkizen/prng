@@ -2,9 +2,8 @@ package prng
 
 import (
 	"math/bits"
-	"testing"
 	"math/rand"
-	"math"
+	"testing"
 
 	"github.com/MichaelTJones/pcg"
 	exprand "github.com/golang/exp/rand"
@@ -62,9 +61,8 @@ func BenchmarkGoWorkers(b *testing.B) {
 }
 func BenchmarkEmpty(b *testing.B) {
 	var i int
-	for n := 0; n < b.N; { // 1 CPU cycle, 0.28 ns @ 3.6 MHz
-		n++
-		i = n 
+	for n := 0; n < b.N; n++ { // 1 CPU cycle, 0.28 ns @ 3.6 MHz
+		i = n
 	}
 	isink = i
 }
@@ -116,42 +114,67 @@ func BenchmarkJump(b *testing.B) {
 	}
 	usink = x.Uint64()
 }
+
 func BenchmarkState(b *testing.B) {
+	x := NewXoro(1)
+	sb := make([]byte, 0, 16*1000)
+	for n := 0; n < b.N; n++ {
+		for i := 0; i < 1000; i++ {
+			sb = append(sb, x.State()...)
+		}
+	}
+	x.SetState(sb[500*16:])
+	usink = x.Uint64()
+}
+func BenchmarkGetState(b *testing.B) {
+	x := NewXoro(1)
+
+	sb := make([]byte, 16*1000)
+
+	for n := 0; n < b.N; n++ {
+		for i := 0; i < 1000; i++ {
+			x.GetState(sb[i*16:])
+		}
+	}
+	x.SetState(sb[500*16:])
+	usink = x.Uint64()
+}
+func BenchmarkSetState(b *testing.B) {
 	// x := NewXosh(1)
 	x := NewXoro(1)
-	s := make([]byte, 32)
+	s := x.State()
 	for n := 0; n < b.N; n++ {
-		s = x.State()
+		x.SetState(s)
+		if n == 1000 {
+			x.Uint64()
+			s = x.State()
+		}
 	}
 	x.SetState(s)
 	usink = x.Uint64()
 }
-func BenchmarkSetState(b *testing.B) {
-	x := NewXosh(1)
-	// x := NewXoro(1)
-	s := make([]byte, 32)
-	for n := 0; n < b.N; n++ {
-		x.SetState(s)
-	}
-	usink = x.Uint64()
-}
+
 func BenchmarkBitsLeadingZeros(b *testing.B) {
 	var zeros uint64
 	for n := 0; n < b.N; n++ {
-		zeros = uint64(bits.LeadingZeros64(uint64(n) + (1 << 52)))
+		zeros = uint64(bits.LeadingZeros64(uint64(n) * 0x9e3779b97f4a7c15))
 	}
 	usink = zeros
 }
+
 // ---------------------------------------- New generator--------------------//
-func BenchmarkNew(b *testing.B) {
-	var x Xoro
-	// var x Xosh
+func BenchmarkNewPrng(b *testing.B) {
+	// var x Xoro
+	var x Xosh
+	// var x Prng
 	for n := 0; n < b.N; n++ {
-		x = NewXoro(uint64(n))
-		// x = NewXosh(uint64(n))
+		// x = New(uint64(n))
+		// x = NewXoro(uint64(n))
+		x = NewXosh(uint64(n))
 	}
 	usink = x.Uint64()
 }
+
 func BenchmarkNewGonum(b *testing.B) {
 	x := gonum.NewXoshiro256starstar(1)
 	for n := 0; n < b.N; n++ {
@@ -159,13 +182,15 @@ func BenchmarkNewGonum(b *testing.B) {
 	}
 	usink = x.Uint64()
 }
-func BenchmarkExprand(b *testing.B) {
+
+func BenchmarkNewRand(b *testing.B) {
 	x := rand.New(rand.NewSource(1))
 	for n := 0; n < b.N; n++ {
 		x = rand.New(rand.NewSource(int64(n)))
 	}
 	usink = uint64(x.Int63())
 }
+
 func BenchmarkNewExprand(b *testing.B) {
 	x := exprand.New(exprand.NewSource(1))
 	for n := 0; n < b.N; n++ {
@@ -173,60 +198,57 @@ func BenchmarkNewExprand(b *testing.B) {
 	}
 	usink = x.Uint64()
 }
-func BenchmarkExprandSlice(b *testing.B) {
+func BenchmarkNewPrngSlice(b *testing.B) {
 	const size = 1000000
-	var x []Rand
+	var x []Prng
 	for n := 0; n < b.N; n++ {
-		x = NewRandSlice(size, 1)
+		x = NewPrngSlice(size, 1)
 	}
 	usink = x[size/2].Uint64()
 }
-func BenchmarkNext(b *testing.B) {
-	var x Xoro
+func BenchmarkNextPrng(b *testing.B) {
+	// var x Xoro
 	// var x Xosh
+	var x Prng
 	for n := 0; n < b.N; n++ {
-		x = NextXoro()
+		x = Next()
+		// x = NextXoro()
 		// x = NextXosh()
 	}
 	usink = x.Uint64()
 }
 
-func BenchmarkLeadingZeros(b *testing.B) {
-	
-	var u uint64
-	x := NewXoro(1)
+func BenchmarkLdexp(b *testing.B) {
+	var y float64
 	for n := 0; n < b.N; n++ {
-		u = x.Uint64() >> 10
-		u = uint64(bits.LeadingZeros64(u))
-		
-	usink = u
+		// y = 1.2 * twoToMinus(uint64(n) & 255)
+		y = ldexp(1.2, uint64(n)&255)
+		// y = 1.2 * math.Float64frombits((1023 - uint64(n) & 255) << 52)
 	}
+	fsink = y
 }
 
 //-----------------------------------------------------Float64--------//
-func BenchmarkFloat64Methods(b *testing.B) {
-	// var y float64
-	y := math.Abs(1.0)
-	// var u uint64
-	// x := NewXoro(1)
+func BenchmarkMiscFormulas(b *testing.B) {
+	var y float64
+	var u uint64
+	x := NewXoro(1)
 	for n := 0; n < b.N; n++ {
-		// y = Float64_64()
-		// y = Float64_1024()
 
 		// y = float64(x.Uint64() &^ (1<<63))
 		// y = float64(x.Uint64() | (1<<63))
 		// y = float64(x.Uint64())
-	
-		// u = x.Uint64() | (1 << 63)
-	
+
+		u = x.Uint64() | (1 << 63)
+
 		// y = float64(u )												// 1.7
 		// y = float64(u & 1)											// 1.43
-		// y = float64((u >> 10 + 1) >> 1) / (1<<53) 					// 1.7
+		y = float64((u>>10+1)>>1) / (1 << 53) // 1.7
 		// y = float64(u | 1) / (1<<64)									// 2.0
 		// y = math.Float64frombits(1022 << 52 | (u >> 11 + 1) >> 1)	// 1.55
 		// y = math.Float64frombits(1022 << 52 | u >> 12)				// 1.40
 
-		// y = float64(x.Xoroshiro128plus() >> 11) / (1 << 53) 
+		// y = float64(x.Xoroshiro128plus() >> 11) / (1 << 53)
 		// y = math.Float64frombits(1023 << 52 | (x.Xoroshiro128plus() >> 12)) - 1
 	}
 	fsink = y
@@ -237,34 +259,38 @@ func BenchmarkFloat64_64(b *testing.B) {
 	x := NewXoro(1)
 	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
-        //  y = x.Float64_64()
-        // y = x.float64_64Div()
-        y = x.float64_64Tab()
+		y = x.Float64_64()
+		// y = x.float64_64Div()
+		// y = x.float64_64Tab()
 		// y = x.Float64_64R()
 	}
 	fsink = y
 }
 
-func BenchmarkFloat64_1024(b *testing.B) {
+func BenchmarkFloat64full(b *testing.B) {
 	var y float64
 	x := NewXoro(1)
 	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
-		y = x.Float64_1024()
-		// y = x.Float64_1024R()
+		y = x.Float64full()
+		// y = x.Float64fullR()
+		// y = x.float64fullDiv()
 	}
 	fsink = y
 }
+
 func BenchmarkFloat64_117(b *testing.B) {
 	var y float64
 	x := NewXoro(1)
 	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
 		y = x.Float64_117()
+		// y = x.Float64_128()
 		// y = x.Float64_117R()
 	}
 	fsink = y
 }
+
 func BenchmarkRandomReal(b *testing.B) {
 	var y float64
 	x := NewXoro(1)

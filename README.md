@@ -3,16 +3,17 @@
 
 Package prng has methods of delivering pseudo-random number generators concurrent
 safely for multiple goroutines for large scale parallel computations.
+Also uniform random float64 methods capable of returning any float64 from [0, 1).
 Additionally, prng implements a set of 64-bit pseudo-random number functions with the same API as standard library math/rand.
 For these functions you can import rand "github.com/pekkizen/prng" instead of "math/rand". Prng functions are faster
-but not safe for concurrent use.  Package prng is still experimental and there is
+but not safe for concurrent use.  Package prng is experimental and there is
 no guarantee of backward compatibility.
 
 Package prng uses Xoroshiro128 and xoshiro256 random generators and jump functions from
 Dipartimento di Informatica Università degli Studi di Milano.
 Written by David Blackman and Sebastiano Vigna and licensed under
 [creativecommons](http://creativecommons.org/publicdomain/zero/1.0/).
-Background: [*Scrambled Linear Pseudorandom Number Generators* by David Blackman and Sebastiano Vigna.](http://vigna.di.unimi.it/ftp/papers/ScrambledLinear.pdf) Package prng functions are adapted from the C-source code from http://prng.di.unimi.it.  
+Background: [*Scrambled Linear Pseudorandom Number Generators* by David Blackman and Sebastiano Vigna.](http://vigna.di.unimi.it/ftp/papers/ScrambledLinear.pdf) Package prng functions are adapted from the C-source code by [Vigna](http://prng.di.unimi.it).  
 
 The authors recommendations for generator use
 
@@ -38,8 +39,8 @@ Package prng functions Float64 are implemented by the suggested + generators and
 xoroshiro128+ and \*\*  have the same linear engine. Also, xoshiro256+ and \*\*.
 So, the same random state receiver variable can be used for floats and uints without
 disturbing random stream properties. The generators can be used as a random source
-for github.com/golang/exp/rand. Functions for random floating-point numbers are
-documented in https://github.com/pekkizen/prng/wiki/floats.
+for github.com/golang/exp/rand. Functions for uniform random floating-point numbers are
+documented [here](https://github.com/pekkizen/prng/wiki/floats).
 
 ### Benchmarking generator speeds
 
@@ -163,29 +164,29 @@ By jump functions it is easy to generate non-overlapping subsequence’s for par
 Below is a stripped version of the full code. The main concept is type Outlet, which is a mutex
 protected source of random generators. Outlet has Next() method, which returns a generator after
 a jump from the previous generator.
-Type Rand is just a light wrapper around the actual generator. Xoroshiro128 and
-xoshiro256 can also be used directly, if Rands extra methods are not needed.
+Type Prng is just a light wrapper around the actual generator. Xoroshiro128 and
+xoshiro256 can also be used directly, if Prngs extra methods are not needed.
 
 ```Go
-type Rand struct {
+type Prng struct {
     // rng Xosh //xoshiro256
     rng Xoro //xoroshiro128
 }
 type Outlet struct {
     mu    sync.Mutex
-    rand  Rand
+    rng  Prng
 }
 func NewOutlet(seed uint64) *Outlet {
     s := &Outlet{}
-    s.rand.Seed(seed)
+    s.rng.Seed(seed)
     return s
 }
-func (s *Outlet) Next() Rand {
+func (s *Outlet) Next() Prng {
     s.mu.Lock()
     defer s.mu.Unlock()
 
-    s.rand.Jump()
-    return s.rand
+    s.rng.Jump()
+    return s.rng
 }
 ```
 
@@ -204,16 +205,16 @@ func ResetGlobalOutlet(seed uint64) {
         global.outlet = NewOutlet(seed)
     })
 }
-func Next() Rand {
+func Next() Prng {
     return global.outlet.Next()
 }
 ```
 
-Function NewRandSlice returns a slice of n generators. It can be used to create the generators faster in batch.
+Function NewPrngSlice returns a slice of n generators. It can be used to create the generators faster in batch.
 
 ```Go
-func NewRandSlice(n int, seed uint64) []Rand {
-    s := make([]Rand, n)
+func NewPrngSlice(n int, seed uint64) []Prng {
+    s := make([]Prng, n)
     s[0].Seed(seed)
     for i := 1; i < n; i++ {
         s[i] = s[i-1]
@@ -234,14 +235,14 @@ func worker() {
 }
 ```
 
-As a parameter. A Rand is a value type and each worker gets a local copy of the Rand.
-A Rand is only 2 or 4 x uint64 of data. As a value type, a Rand is as concurrent safe as
-any other value variable, so far you don't use global Rands and don't pass pointers to a same Rand
-to concurrent functions. You can pass a single Rand as a value parameter to multiple concurrent
-functions, but all the passed copy Rands have the same random stream.
+As a parameter. A Prng is a value type and each worker gets a local copy of the Prng.
+A Prng is only 2 or 4 x uint64 of data. As a value type, a Prng is as concurrent safe as
+any other value variable, so far you don't use global Prngs and don't pass pointers to a same Prng
+to concurrent functions. You can pass a single Prng as a value parameter to multiple concurrent
+functions, but all the passed copy Prngs have the same random stream.
 
 ```Go
-func worker(r Rand) { ... }
+func worker(r Prng) { ... }
 
 go worker(prng.Next())
 ```
@@ -250,7 +251,7 @@ Putting a lot of workers go fast to work.
 
 ```Go
 workers := 1000000
-rng := prng.NewRandSlice(workers, 1)
+rng := prng.NewPrngSlice(workers, 1)
 for i := 0; i < workers; i++ {
     go worker(rng[i])
 }
@@ -273,8 +274,8 @@ Setting up generators from a saved generator state file.
 
 ```Go
 func worker(me int, statebytes []byte) {
-    myRng := prng.Rand{}
-    myRng.SetState(statebytes[me * prng.RandStateSize:])
+    myRng := prng.Prng{}
+    myRng.SetState(statebytes[me * prng.PrngStateSize:])
     ...
 }
 statebytes := ReadFile("statefile")
@@ -318,7 +319,7 @@ func OverlapProbability(n, L, P float64) (lower, upper float64)
 Functions are not safe for concurrent use.
 Functions Int63n, Intn and Uint64n don't make any bias correction. The bias with
 64-bit numbers is very small and probably not detectable from the random stream.
-All functions are also implemented as methods of type Rand. A single Rand should not be shared concurrently.
+All functions are also implemented as methods of type Prng. A single Prng should not be shared concurrently.
 
 ```Go
 func Uint64() uint64
@@ -396,26 +397,26 @@ func RandomReal() float64
 All seeding goes through Splitmix prng/shuffler and the seeds do not need to be complicated, eg. 0, 1, etc. are ok.
 
 ```Go
-func New(seed uint64) Rand
-    New returns a new Rand seeded with the seed.
+func New(seed uint64) Prng
+    New returns a new Prng seeded with the seed.
 ```
 
 ```Go
 func Seed(seed uint64)
-    Seed seeds system global Rand globalRand by the seed. globalRand is
+    Seed seeds system global Prng globalPrng by the seed. globalPrng is
     used by non-method functions above.
 ```
 
 ```Go
-func (r *Rand) Seed(seed uint64)
-    Seed seeds a Rand by the seed. Any seed is ok. Do not seed Rands created by
-    Next or NewRandSlice.
+func (r *Prng) Seed(seed uint64)
+    Seed seeds a Prng by the seed. Any seed is ok. Do not seed Prngs created by
+    Next or NewPrngSlice.
 ```
 
 ```Go
-func NewRandSlice(n int, seed uint64) []Rand
-    NewRandSlice returns a slice of n Rands with non-overlapping random streams. The
-    first Rand is seeded by seed.
+func NewPrngSlice(n int, seed uint64) []Prng
+    NewPrngSlice returns a slice of n Prngs with non-overlapping random streams. The
+    first Prng is seeded by seed.
 ```
 
 ```Go
@@ -430,32 +431,32 @@ func ResetGlobalOutlet(seed uint64)
 ```
 
 ```Go
-func (s *Outlet) Next() Rand
-    Next returns the next Rand from Outlet. Each Rand has 2^64 long random
-    stream, which is not overlapping with other Rands streams. Next is safe for
+func (s *Outlet) Next() Prng
+    Next returns the next Prng from Outlet. Each Prng has 2^64 long random
+    stream, which is not overlapping with other Prngs streams. Next is safe for
     concurrent use by multiple goroutines.
 ```
 
 ```Go
-func Next() Rand
-    Next returns the next non-overlapping stream Rand from globalOutlet. Next is
+func Next() Prng
+    Next returns the next non-overlapping stream Prng from globalOutlet. Next is
     safe for concurrent use by multiple goroutines.
 ```
 
 ```Go
-func (r *Rand) Jump()
+func (r *Prng) Jump()
     r.Jump sets r to the same state as 2^64 calls to r.Uint64. Jump can be used to
     generate 2^64 non-overlapping subsequences for parallel computations.
 
 ```
 
 ```Go
-func (r *Rand) State() []byte
+func (r *Prng) State() []byte
     State returns the current binary state of the generator r as []byte.
 ```
 
 ```Go
-func (r *Rand) SetState(b []byte)
+func (r *Prng) SetState(b []byte)
     SetState sets the state of the generator r from the state in b []byte.
 ```
 
