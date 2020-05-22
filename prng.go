@@ -219,48 +219,48 @@ func (r *Prng) Intn(n int) int {
 	return int((r.rng.Uint64() % uint64(n)) &^ (1 << 63))
 }
 
-// The top level non method functions using system generator globalRand -----------//
-// globalRand is initially seeded by UnixNano time. It can be reseeded
+// The top level non method functions using system generator globalPrng -----------//
+// globalPrng is initially seeded by UnixNano time. It can be reseeded
 // by Seed function. These functions are not safe for concurrent use by
 // multiple goroutines.
 
-var globalRand = New(uint64(time.Now().UnixNano()))
+var globalPrng = New(uint64(time.Now().UnixNano()))
 
-// Seed seeds system global generator globalRand by seed.
+// Seed seeds system global generator globalPrng by seed.
 func Seed(seed uint64) {
-	globalRand.rng.Seed(seed)
+	globalPrng.rng.Seed(seed)
 }
 
 // Float64 returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution is  2^53 evenly spaced floats with spacing 2^-53.
 func Float64() float64 {
-	return globalRand.rng.Float64()
+	return globalPrng.rng.Float64()
 }
 
 // Float64_64 returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-12, 1) and 2^52 evenly spaced
 // floats in [0, 2^-12) with spacing 2^-64.
 func Float64_64() float64 {
-	return globalRand.rng.Float64_64()
+	return globalPrng.rng.Float64_64()
 }
 
 // Float64_117 returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-65, 1) and 2^52  evenly spaced
 // floats in [0, 2^-65) with spacing 2^-117.
 func Float64_117() float64 {
-	return globalRand.rng.Float64_117()
+	return globalPrng.rng.Float64_117()
 }
 
 // Float64full returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-1023, 1) and  0.
 func Float64full() float64 {
-	return globalRand.rng.Float64full()
+	return globalPrng.rng.Float64full()
 }
 
 // RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-1023, 1) and  0.
 func RandomReal() float64 {
-	return globalRand.rng.RandomReal()
+	return globalPrng.rng.RandomReal()
 }
 
 // Float64Bisect returns a uniformly distributed pseudo-random float64 from [0, 1).
@@ -268,27 +268,27 @@ func RandomReal() float64 {
 // for validating other functions distributions.
 // if round is true, rounding is used.
 func Float64Bisect(round bool) float64 {
-	return globalRand.rng.Float64Bisect(round)
+	return globalPrng.rng.Float64Bisect(round)
 }
 
 // Uint64 returns a pseudo-random 64-bit value as an uint64
 func Uint64() uint64 {
-	return globalRand.rng.Uint64()
+	return globalPrng.rng.Uint64()
 }
 
 // Int63 returns a non-negative pseudo-random int64.
 func Int63() int64 {
-	return int64(globalRand.rng.Uint64() >> 1)
+	return int64(globalPrng.rng.Uint64() >> 1)
 }
 
 // Int returns a non-negative pseudo-random int.
 func Int() int {
-	return int(globalRand.rng.Uint64() >> 1)
+	return int(globalPrng.rng.Uint64() >> 1)
 }
 
 // Uint64n returns a pseudo-random number in [0,n) as an uint64.
 func Uint64n(n uint64) uint64 {
-	return globalRand.rng.Uint64() % n
+	return globalPrng.rng.Uint64() % n
 }
 
 // Int63n return a pseudo-random number in [0,n) as an int64
@@ -296,7 +296,7 @@ func Int63n(n int64) int64 {
 	if n <= 0 {
 		panic("invalid argument to Int63n")
 	}
-	return int64((globalRand.rng.Uint64() % uint64(n)) &^ (1 << 63))
+	return int64((globalPrng.rng.Uint64() % uint64(n)) &^ (1 << 63))
 }
 
 // Intn returns a pseudo-random number in [0,n)  as an int.
@@ -304,7 +304,7 @@ func Intn(n int) int {
 	if n <= 0 {
 		panic("invalid argument to Intn")
 	}
-	return int((globalRand.rng.Uint64() % uint64(n)) &^ (1 << 63))
+	return int((globalPrng.rng.Uint64() % uint64(n)) &^ (1 << 63))
 }
 
 // Splitmix is a 64-bit state SplitMix64 pseudo-random number generator
