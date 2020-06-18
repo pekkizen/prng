@@ -60,14 +60,14 @@ func (x *Xoro) Uint64() (next uint64) {
 
 	next = bits.RotateLeft64(x.s0 * 5, 7) * 9
 	*x = x.NextState()
-	if twistedUint64 {
+	if twistedUint64 { // for testing
 		next = twisted(next)
 	}
 	return
 }
 
 func twisted(next uint64) uint64 {
-	shift := next & 63
+	shift := (next >> 10) & 63
 	if next % 2 == 0 {
 		return 0
 	}
@@ -105,10 +105,12 @@ func (x Xoro) NextState() Xoro {
 	}
 }
 
-// GetState puts the current state of the generator x to b.
-// GetState without allocation is faster than State().
-func (x *Xoro) GetState(b []byte)  {
-
+// WriteState writes the current state of the generator x to b.
+// WriteState without allocation is faster than State().
+func (x *Xoro) WriteState(b []byte)  {
+	if len(b) < XoroStateSize {
+		panic("WriteState: byte slice too short")
+	}
 	// This expects a little endian cpu, eg. all amd64.
 	*(*uint64)(unsafe.Pointer(&b[0])) = bits.ReverseBytes64(x.s0)
 	*(*uint64)(unsafe.Pointer(&b[8])) = bits.ReverseBytes64(x.s1)
@@ -116,17 +118,17 @@ func (x *Xoro) GetState(b []byte)  {
 
 // State returns the current state of the generator x as []byte.
 func (x *Xoro) State() []byte {
-	var b[16]byte
+	var b[XoroStateSize]byte
 
 	*(*uint64)(unsafe.Pointer(&b[0])) = bits.ReverseBytes64(x.s0)
 	*(*uint64)(unsafe.Pointer(&b[8])) = bits.ReverseBytes64(x.s1)
 	return b[:]
 }
 
-// SetState sets the state of the generator x from the state in b []byte.
-func (x *Xoro) SetState(b []byte) {
+// ReadState reads the state of the generator x from b []byte.
+func (x *Xoro) ReadState(b []byte) {
 	if len(b) < XoroStateSize {
-		panic("Xoro: not enough state bytes")
+		panic("ReadState: byte slice too short")
 	}
 	x.s0 = bits.ReverseBytes64(*(*uint64)(unsafe.Pointer(&b[0])))
 	x.s1 = bits.ReverseBytes64(*(*uint64)(unsafe.Pointer(&b[8])))
@@ -159,7 +161,6 @@ func (x *Xoro) Float64_64R() float64 {
 	if u == 0 { return 0 }
 	z := uint64(bits.LeadingZeros64(u)) + 1
 	return math.Float64frombits((((1023 - z) << 53 | u << z >> 11) + 1) >> 1)
-	// return math.Float64frombits((1023 - z) << 52 | (u << z >> 11 + 1) >> 1) // wrong
 }
 
 // Float64full returns a uniformly distributed pseudo-random float64 from [0, 1). 
@@ -168,7 +169,7 @@ func (x *Xoro) Float64full() float64 {
 
 	u := x.Uint64()
 	z := uint64(bits.LeadingZeros64(u)) + 1
-	if z <= 12 {                                 //99.95% of cases 
+	if z <= 12 {                                 // 99.975% of cases 
 		return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
 	}
 	z--
@@ -193,7 +194,7 @@ func (x *Xoro) Float64fullR() float64 {
 
 	u := x.Uint64()
 	z := uint64(bits.LeadingZeros64(u)) + 1
-    if z <= 11 {  								//99.9% of cases 
+    if z <= 11 {  								//99.95% of cases 
 		return math.Float64frombits((((1023 - z) << 53 | u << z >> 11) + 1) >> 1)
 	}
 	z--
@@ -205,11 +206,11 @@ func (x *Xoro) Float64fullR() float64 {
 		if exp + z > 1074 { return 0 }
 	}
 	u = u << z | x.Uint64() >> (64 - z)
-	z += exp
-	if z < 1022 {
-		return math.Float64frombits((((1022 - z) << 53 | u << 1 >> 11) + 1) >> 1)
+	exp += z
+	if exp < 1022 {
+		return math.Float64frombits((((1022 - exp) << 53 | u << 1 >> 11) + 1) >> 1)
 	}
-	return math.Float64frombits((u >> (z - 1022) >> 11 + 1) >> 1)
+	return math.Float64frombits((u >> (exp - 1022) >> 11 + 1) >> 1)
 }
 
 // twoToMinus(n) returns 2^-n as a float64.
@@ -221,7 +222,7 @@ func twoToMinus(n uint64) float64 {
 // ldexp(f, exp) returns f * 2^-exp as a float64.
 func ldexp(f float64, exp uint64) float64 {
 	if exp > 1022 {
-		f *= 0X1.0p-1022
+		f *= 0X1p-1022
 		exp -= 1022
 	}
 	return f * twoToMinus(exp)
@@ -242,6 +243,19 @@ func (x *Xoro) Float64_117() float64 {
 	return float64(u >> 11) * twoToMinus(53 + z)
 }
 
+// Float64_117T --
+func (x *Xoro) Float64_117T() float64 {
+
+	u := bits.RotateLeft64(x.s0 * 5, 7) * 9
+	u2 := x.s0 + x.s1
+	*x = x.NextState()
+	
+	z := uint64(64 - bits.Len64(u)) 
+	u = u << z | u2 >> (64 - z)
+	
+	return float64(u >> 11) * twoToMinus(53 + z)
+}
+
 // Float64_117R returns a uniformly distributed pseudo-random float64 from 
 // [0, 1] using rounding. The distribution includes all floats in [2^-65, 1]
 // and 2^52 evenly spaced floats in [0, 2^-65) with spacing 2^-117.
@@ -254,14 +268,14 @@ func (x *Xoro) Float64_117R() float64 {
 	}
 	z--
     u = u << z | x.Uint64() >> (64 - z)
-    return float64((u >> 10 + 1) >> 1) * twoToMinus(53 + z)
+    return float64((u >> 10 + 1) >> 1) * twoToMinus(53 + z) 
 }
 
 // RandomReal returns a uniformly distributed pseudo-random float64 from [0, 1].
 // The distribution includes all floats, but may miss very few
 // subnormal floats in in [0, 2^-1022).
 // http://prng.di.unimi.it/random_real.c  
-// RandomReal is equivalent to Float64fullR in[2^-1022, 1].
+// RandomReal is equivalent to Float64fullR in [2^-1022, 1].
 func (x *Xoro) RandomReal() float64 {
 
 	u := x.Uint64()
@@ -295,7 +309,7 @@ func (x *Xoro) Float64Bisect(round bool) float64 {
 			}
 			u <<= 1
 			mean = (left + right) / 2
-			if mean == left || mean == right {	// right - left = 1 ULP
+			if mean == left || mean == right {	// left and right are adjacent floats
 				if !round {
 					return left					// no rounding
 				}
