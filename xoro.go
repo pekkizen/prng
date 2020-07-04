@@ -165,6 +165,7 @@ func (x *Xoro) Float64_64R() float64 {
 
 // Float64full returns a uniformly distributed pseudo-random float64 from [0, 1). 
 // The distribution includes all floats in [0, 1). 
+// Float64full is equivalent to Float64Bisect in truncate mode.
 func (x *Xoro) Float64full() float64 {
 
 	u := x.Uint64()
@@ -188,8 +189,29 @@ func (x *Xoro) Float64full() float64 {
 	return math.Float64frombits(u >> (exp - 1022) >> 12) // 2^52 subnormal floats
 }
 
+// Float64_128 --
+func (x *Xoro) Float64_128() float64 {
+
+	u := x.Uint64()
+	z := uint64(bits.LeadingZeros64(u)) + 1
+	if z <= 12 {                                 // 99.975% of cases 
+		return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
+	}
+	z--
+	exp := z
+	if u == 0 { 
+		u = x.Uint64() 
+		z = uint64(bits.LeadingZeros64(u))
+		exp = 64 + z
+		if exp >= 128 { return 0 }
+	}
+	u = u << z | x.Uint64() >> (64 - z)
+	return math.Float64frombits((1022 - exp) << 52 | u << 1 >> 12)
+}
+
 // Float64fullR returns a uniformly distributed pseudo-random float64 from [0, 1] 
 // using rounding. The distribution includes all floats in [0, 1].
+// Float64fullR is equivalent to Float64Bisect in rounding mode.
 func (x *Xoro) Float64fullR() float64 {
 
 	u := x.Uint64()
@@ -243,19 +265,6 @@ func (x *Xoro) Float64_117() float64 {
 	return float64(u >> 11) * twoToMinus(53 + z)
 }
 
-// Float64_117T --
-func (x *Xoro) Float64_117T() float64 {
-
-	u := bits.RotateLeft64(x.s0 * 5, 7) * 9
-	u2 := x.s0 + x.s1
-	*x = x.NextState()
-	
-	z := uint64(64 - bits.Len64(u)) 
-	u = u << z | u2 >> (64 - z)
-	
-	return float64(u >> 11) * twoToMinus(53 + z)
-}
-
 // Float64_117R returns a uniformly distributed pseudo-random float64 from 
 // [0, 1] using rounding. The distribution includes all floats in [2^-65, 1]
 // and 2^52 evenly spaced floats in [0, 2^-65) with spacing 2^-117.
@@ -275,7 +284,7 @@ func (x *Xoro) Float64_117R() float64 {
 // The distribution includes all floats, but may miss very few
 // subnormal floats in in [0, 2^-1022).
 // http://prng.di.unimi.it/random_real.c  
-// RandomReal is equivalent to Float64fullR in [2^-1022, 1].
+// RandomReal is equivalent to Float64Bisect in rounding mode in [2^-1024, 1].
 func (x *Xoro) RandomReal() float64 {
 
 	u := x.Uint64()
@@ -302,22 +311,22 @@ func (x *Xoro) Float64Bisect(round bool) float64 {
 		u := x.Uint64()
 		for b := 0; b < 64; b++ {
 
-			if u & (1<<63) != 0 {
+			if u & (1<<63) != 0 {				// evaluate the leftmost bit of u
 				left = mean						// '1' bit -> take the right half, big numbers			
 			} else {
 				right = mean					// '0' bit -> take the left half, small numbers		
 			}
 			u <<= 1
 			mean = (left + right) / 2
-			if mean == left || mean == right {	// left and right are adjacent floats
+			if mean == left || mean == right {	// check if left and right are adjacent floats
 				if !round {
 					return left					// no rounding
 				}
-				if b == 63 {
+				if b == 63 {					// must have one rounding bit
 					u = x.Uint64()
 				}
-				if u & (1<<63) != 0 {			// '1' bit -> round up
-					return right								
+				if u & (1<<63) != 0 {			// evaluate the rounding bit
+					return right				// '1' bit -> round up				
 				} 
 				return left						// '0' bit -> round down
 			}

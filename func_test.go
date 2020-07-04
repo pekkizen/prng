@@ -13,49 +13,227 @@ func abs(x float64) float64 {
 	}
 	return -x
 }
-func ulpsBetween(x, y float64) uint64 {
-	if x == y {
-		return 0
-	}
-	if (x < 0 && y > 0) || (x > 0 && y < 0) {
-		return ulpsBetween(x, 0) + ulpsBetween(y, 0)
-	}
-	k := math.Float64bits(y) &^ (1<<63)
-	n := math.Float64bits(x) &^ (1<<63)
-	if n > k {
-		return n - k
-	}
-	return k - n
+
+func TestIsInf(t *testing.T) {
+	max := math.MaxFloat64
+	t.Logf("%v", isInf(math.Inf(1)))
+	t.Logf("%v", isInf(math.Inf(-1)))
+	t.Logf("%v", isInf(math.NaN()))
+	t.Logf("%v", isInf(max))
+	t.Logf("%v", isInf(max + max))
 }
-func adjacent(f1, f2 float64) bool {
-	if f1 == f2 {
-		return false
-	}
-	mean := (f1 + f2) / 2
-	return mean == f1 || mean == f2
+
+func TestInfNaN(t *testing.T) {
+	f1 := math.Inf(1)
+	f2 := f1 + 1
+	f3 := math.Float64frombits(math.Float64bits(f1) + 1)
+	f4 := f3 + 1
+	t.Logf("f1  %X %v", math.Float64bits(f1), f1)
+	t.Logf("f2  %X %v", math.Float64bits(f2), f2)
+	t.Logf("f3  %X %v !!!!!", math.Float64bits(f3), f3)
+	t.Logf("-f3 %X %v\n", math.Float64bits(-f3), -f3)
+	t.Logf("f4  %X %v", math.Float64bits(f4), f4)
+	t.Logf("f3 != f3 %v", f3 != f3)
 }
+
+func TestFloat64Random(t *testing.T) {
+	const rounds int = 1e8*5
+	min, max, i01 := 999.0, 0.0, 0.0
+	x := NewXoro(11)
+	for i := 0; i < rounds; i++ {
+		f := x.float64Random() 
+		if f < min {
+			min = f
+		}
+		if f > max {
+			max = f
+		}
+		if f >= 0 && f <= 1 {
+			i01++
+		}
+
+		
+	}
+	t.Logf("Min   %v", min)
+	t.Logf("Max   %v", max)
+	t.Logf("0 - 1 %v", 100*float64(i01) / float64(rounds))
+}
+
+func TestNextToZero(t *testing.T) {
+    const rounds int = 1e8*3
+	x := NewXoro(1)
+	for i := 0; i < rounds; i++ {
+		f1 := x.float64Random() 
+		switch i {
+		case 1:
+			f1 = 0
+		case 2:
+			f1 = math.Inf(1)
+		case 3:
+			f1 = math.Inf(-1)
+		case 4:
+			f1 = math.MaxFloat64
+		}
+		f2 := nextToZero(f1)
+		f3 := math.Nextafter(f1, 0)
+		if f2 != f3 {
+			t.Logf("Nextafter i=   %d", i)
+			t.Logf("F1  %v", f1)
+			t.Logf("F2  %v", f2)
+			t.Logf("F3  %v", f3)
+		}
+		ulps := ulpsBetween(f1, f2)
+		if ulps != 1 && f1 > 0 && !isInf(f1) {	
+			t.Logf("Ulps %v", ulps)
+			t.Logf("i=   %d", i)
+			t.Logf("F1   %v", f1)
+			t.Fatalf("F2   %v", f2)
+		}
+	}
+}
+
+func TestNextToZeroFast(t *testing.T) {
+    const rounds int = 1e8
+	x := NewXoro(1)
+	for i := 0; i < rounds; i++ {
+		f1 := x.float64Random() 
+		switch i {
+		case 1:
+			f1 = 0
+		case 2:
+			f1 = math.Nextafter(0x1p-1022, 1)
+		case 3:
+			f1 = math.MaxFloat64
+		}
+		f2 := f1 * (1 - 0x1p-53)
+		f3 := math.Nextafter(f1, 0)
+		if f2 != f3 && f2 > 0x1p-1072 {
+			t.Logf("Nextafter i=   %d", i)
+			t.Logf("F1  %v", f1)
+			t.Logf("F2  %v", f2)
+			t.Fatalf("F3  %v", f3)
+		}
+	}
+}
+
+func TestNextFromZero(t *testing.T) {
+    const rounds int = 1e8*3
+	x := NewXoro(1)
+	for i := 0; i < rounds; i++ {
+		f1 := x.float64Random() 
+		switch i {
+		case 1:
+			f1 = 0
+		case 2:
+			f1 = math.Inf(1)
+		case 3:
+			f1 = math.Inf(-1)
+		case 4:
+			f1 = math.MaxFloat64
+		}
+		f2 := nextFromZero(f1)
+		d := math.Inf(1)
+		if f1 < 0 { d = -d }
+		f3 := math.Nextafter(f1, d)
+		if f2 != f3 {
+			t.Logf("Nextafter i=   %d", i)
+			t.Logf("F1  %v", f1)
+			t.Logf("F2  %v", f2)
+			t.Logf("F3  %v", f3)
+			
+			t.Logf("F1  %X" , math.Float64bits(f1))
+			t.Logf("F2  %X" , math.Float64bits(f2))
+			t.Fatalf("F3  %X" , math.Float64bits(f3))
+		
+		}
+		ulps := ulpsBetween(f1, f2)
+		// if ulps != 1 && abs(f2) <= math.MaxFloat64 {
+		if ulps != 1 && !isInf(f2) {
+			t.Logf("Ulps %v", ulps)
+			t.Logf("i=   %d", i)
+			t.Logf("F1=  %v", f1)
+			t.Fatalf("F2=  %v", f2)
+		}
+	}
+}
+
+
+func TestAdjacent(t *testing.T) {
+    const rounds int = 1e9
+	x := NewXoro(1)
+	for i := 0; i < rounds; i++ {
+		// f1 := x.Float64full() 
+		f1 := x.float64Random()
+		switch i {
+		case 1:
+			f1 = 0
+		case 2:
+			f1 = math.Inf(1)
+		case 3:
+			f1 = math.Inf(-1)
+		case 4:
+			f1 = math.MaxFloat64
+		}
+		
+		f2 := nextFromZero(f1)
+			if !adjacent(f1, f2) && !isInf(f2) {
+			t.Logf("Not adjacent")
+			t.Logf("Ulps %v", ulpsBetween(f1, f2))
+			t.Logf("i=   %d", i)
+			t.Logf("F1=  %v", f1)
+			t.Fatalf("F2=  %v", f2)
+		}
+	}
+}
+
 func TestUlpsBetween(t *testing.T) {
-    const upper = float64((1<<53)-1) / (1<<53)
-    t.Logf("upper to 1 %v", ulpsBetween(upper, 1.0))
- 	t.Logf("log2(ulps) %v", math.Log2(float64(ulpsBetween(0, 0x1p-1023))))
-	t.Logf("log2(ulps) %v", math.Log2(float64(ulpsBetween(-0x1p-1023, 0x1p-1023))))
-	t.Logf("log2(ulps) %v", math.Log2(float64(ulpsBetween(0x1p-1024, 0x1p-1023))))
+	const upper = 1 - 0x1p-53
+	const maxFloat = 0x1p1023 * (2 - 0x1p-52)
+	const minFloat = 0x1p-1074
+
+	t.Logf("+Inf       %v", ulpsBetween(math.Inf(1), 1.0))
+	t.Logf("-Inf       %v", ulpsBetween(math.Inf(-1), 1.0))
+	t.Logf("NaN        %v", ulpsBetween(math.NaN(), 1.0))
+	t.Logf("+Inf +Inf  %v", ulpsBetween(math.Inf(1), math.Inf(1)))
+	t.Logf("0.5 - 1    %v", math.Log2(float64(ulpsBetween(0.5, 1.0))))
+	t.Logf("0 - 1      %v", math.Log2(float64(ulpsBetween(0, 1.0))))
+ 	t.Logf("subNorm    %v", math.Log2(float64(ulpsBetween(0, 0x1p-1022))))
+	t.Logf("maxFloats  %v", math.Log2(float64(ulpsBetween(-maxFloat, maxFloat))))
+	t.Logf("minFloats  %v", ulpsBetween(-minFloat, minFloat))
 	t.Logf("log2(ulps) %v", math.Log2(float64(ulpsBetween(0x1p-1023, 0x1p-1022))))
-    t.Logf("log2(ulps) %v", math.Log2(float64(ulpsBetween(0x1p-1022, 0x1p-1021))))
-    t.Logf("log2(total) %v", math.Log2(float64(ulpsBetween(0, 1.0))))
+    t.Logf("log2(ulps) %v", math.Log2(float64(ulpsBetween(0, 0x1p-1023))))
+ 
     for i := uint64(1); i < 17;  i++ {
-        t.Logf("log2(ulps) %v \t%d \t %d", 
+        t.Logf("\t%v \t%d \t%d", 
         math.Log2(float64(ulpsBetween(1.0/float64(uint64(1<<i)), upper))), i, 1<<i)
     }
 }
 
+func TestUlp(t *testing.T) {
+    const rounds int = 1e8*3
+	x := NewXoro(1)
+	for i := 0; i < rounds; i++ {
+		f1 := x.float64Random()
+		f2 := f1 + ulp(f1)
+		if !adjacent(f1, f2) {
+			t.Logf("Not adjacent")
+			t.Logf("Ulps %v", ulpsBetween(f1, f2))
+			t.Logf("i    %d", i)
+			t.Logf("F1   %v", f1)
+			t.Logf("F2   %v", f2)
+			t.Logf("F1   %X" , math.Float64bits(f1))
+			t.Fatalf("F2   %X" , math.Float64bits(f2))
+		}
+	}
+}
+
 func TestOverlapProbability(t *testing.T) {
-	var n float64 = 1e23
-	var L float64 = (1<<64)
-	var P float64 = (1<<256)
+	var n float64 = 1e6
+	var L float64 = 1<<54
+	var P float64 = 1<<128
 	lower, upper := OverlapProbability(n, L, P)
-	t.Logf("lower= %15.14e\n", lower)
-	t.Logf("upper= %15.14e", upper)
+	t.Logf("lower= %15.16e\n", lower)
+	t.Logf("upper= %15.16e", upper)
 }
 
 func TestNewOutlet(t *testing.T) {
@@ -104,7 +282,7 @@ func TestState(t *testing.T) {
 	for i := 0; i < rounds; i++ {
 		x.Jump()
 		// b = append(b, x.State()...)
-		x.GetState(s)
+		x.WriteState(s)
 		b = append(b, s...)
 		if i == 1000 {
 			z = x
@@ -112,7 +290,7 @@ func TestState(t *testing.T) {
 	}
 	ioutil.WriteFile("statebytes", b, 0644)
 	c, _ := ioutil.ReadFile("statebytes")
-	x.SetState(c[1000*size:])
+	x.ReadState(c[1000*size:])
 	if x.Uint64() != z.Uint64() {
 		t.Errorf("TestState: x.Uint64() != z.Uint64()")
 	}
@@ -120,7 +298,7 @@ func TestState(t *testing.T) {
 
 func TestJump(t *testing.T) {
 	rr := NewXosh(1)
-	rx := NewXosh(1)
+	rx := rr
 	for i := 0; i < 10; i++ {
 		rr.Jump()
 		rx.Jump()
@@ -176,7 +354,7 @@ func TestSplitmixJump2(t *testing.T) {
 }
 func TestJump32(t *testing.T) {
 	// This test makes 2^32 calls of Uint64 and gets the same state as single Jump32
-	const rounds = (1<<32)
+	const rounds int = (1<<32)
 	y := NewXoro(1)
 	z := y
 	z.JumpShort()
@@ -195,7 +373,7 @@ func TestJump32(t *testing.T) {
 func TestJump64(t *testing.T) {
 	// This test makes 2^32 jump32 and gets the same state as single Jump64
 	// go test -timeout 2000s prng -run ^(TestJump64)$ -v
-	const rounds = (1<<32)
+	const rounds int = (1<<32)
 	y := NewXoro(1)
 	z := y
 	z.Jump()
@@ -214,7 +392,7 @@ func TestJump64(t *testing.T) {
 func TestJump96(t *testing.T) {
 	// This test makes 2^32 jump64 and gets the same state as single Jum96
 	// go test -timeout 2000s prng -run ^(TestJump96)$ -v
-	const rounds = (1<<32)
+	const rounds int = (1<<32)
 	y := NewXoro(1)
 	z := y
 	z.JumpLong()
@@ -271,12 +449,12 @@ func TestNewXoshSlice(t *testing.T) {
 
 // ---------------------------------- testing generator output ------------
 func TestSplitmixBitsChanged(t *testing.T) {
-	const rounds int = 1e9 * 5
+	const rounds int = 1e9 * 3
 	var sum int
 	seed := uint64(0)
 	last := Splitmix(&seed)
 	for i := 1; i <= rounds; i++ {
-		seed = uint64(i)
+		seed = uint64(i) // seeding by index
 		n := Splitmix(&seed)
 		sum += bits.OnesCount64(last ^ n)
 		last = n
@@ -287,24 +465,7 @@ func TestSplitmixBitsChanged(t *testing.T) {
 		t.Errorf("Ratio failed")
 	}
 }
-func TestBitsChanged(t *testing.T) {
-    const rounds int = 1e9 
-    const shift = 11
-	var sum int
-	x := NewXoro(1)
 
-	last := x.Uint64() >> shift
-	for i := 0; i < rounds; i++ {
-		n := x.Uint64() >> shift
-		sum += bits.OnesCount64(last ^ n)
-		last = n
-	}
-	ratio := float64(sum) / ((64- shift) * float64(rounds))
-	t.Logf("Ratio of changed bits  %1.9f", ratio)
-	if abs(ratio-0.5) > 0.00001 {
-		t.Errorf("Ratio failed")
-	}
-}
 func TestUint64LowHigh(t *testing.T) {
 	const rounds int = 1e9 * 2
 	const size uint64 = 1e13
@@ -386,16 +547,17 @@ func TestFloat64Tab(t *testing.T) {
 	}
 }
 func TestFloat64FourSlots(t *testing.T) {
-	const rounds int = 1e8 * 6
-	var slotsize =1.0/(1<<53) *(1<<32)
+	const rounds int = 1e8 * 4
+	var slotsize =1.0/(1<<53) * (1<<32)
 	const failLim = 1e-1
 	var tab [4]int
 	failed := 0
-	x := NewXoro(1)
+	x := NewXoro(12)
+
 	for i := 0; i < rounds; i++ {
 		// f := x.RandomReal()
 		// f := x.Float64_64()
-		f := x.Float64()
+		f := x.float64div63()
 		// f := x.Float64_117()
 		// f := x.Float64full()
 
@@ -416,7 +578,7 @@ func TestFloat64FourSlots(t *testing.T) {
 			tab[3]++
 		}
 	}
-	expected := int(slotsize*float64(rounds) + 0.5)
+	expected := int(slotsize*float64(rounds) + 0.5) 
 	t.Logf("low      %d", tab[0])
 	t.Logf("middle   %d", tab[1])
 	t.Logf("high     %d", tab[2])
@@ -443,10 +605,10 @@ func TestFloat64FourSlots(t *testing.T) {
 }
 
 func TestFloat64NearZeroSlot(t *testing.T) {
-	const rounds int = 1e9 * 5
-	var slotsize =1.0/(1<<53) *(1<<30)
+	const rounds int = 1e9 * 2
+	var slotsize = 1.0/(1<<53) * (1<<30)
 	hit := 0
-	x := NewXoro(11)
+	x := NewXoro(1)
 	// x := NewXosh(1)
 	for i := 0; i < rounds; i++ {
 		f := x.Float64_64()
@@ -463,11 +625,11 @@ func TestFloat64NearZeroSlot(t *testing.T) {
 	t.Logf("expected  %d", expected)
 }
 
-// --------------------------------------------------53-bit divide
+// -------------------------------------------------------52/53/63-bit divide
 func Test53BitDivideDistribution(t *testing.T) {
 
 	x := NewXoro(1)
-	const rounds = 1e8*3
+	const rounds int = 1e8*3
 	const wid = 0 // scaling with 2^wid keeps most above properties
 	const equidist = 1.0 / (1 << (53 - wid))
 	const minAdjacent = (1<<52)
@@ -491,41 +653,11 @@ func Test53BitDivideDistribution(t *testing.T) {
 
 	}
 }
-func Test53BitDivideDistribution2(t *testing.T) {
-	// same as above but sequential
 
-	const equidist = 1.0 / (1<<53)
-	const div = (1<<53)
-
-	var rounds uint64 = (1<<30)
-	var start uint64 = (1<<52) - 1000
-
-	stop := start + rounds
-	if stop > (1<<53)-1 {
-		stop = (1<<53) - 1
-	}
-	f1 := float64(start) / div
-
-	for i := uint64(start) + 1; i < stop; i++ {
-		f2 := float64(i) / div
-
-		if f2-f1 != equidist {
-			t.Fatalf("Equidistance failed: f1= %v f2= %v", f1, f2)
-		}
-		k := uint64(f2 * div)
-		if k != i {
-			t.Fatalf("Inverse function failed: k - i =%d", k-i)
-		}
-		if f1 >= 0.5 && !adjacent(f1, f2) {
-			t.Fatalf("adjacent failed: ulps=%d f1=%v", ulpsBetween(f1, f2), f1)
-		}
-		f1 = f2
-	}
-}
 func Test52BitExplicitVsDivide(t *testing.T) {
 	// 52-bit division method and the 52-bit explicit method are same
 	x := NewXoro(1)
-	const rounds int = 1e9
+	const rounds int = 1e8
 	for i := 0; i < rounds; i++ {
 		k := x.Uint64() >> 12
 		f1 := float64(k) / (1<<52)
@@ -540,11 +672,29 @@ func Test52BitExplicitVsDivide(t *testing.T) {
 	}
 }
 
-// In xoro.go set const twistedUint64 = true for some of the tests
+func Test63BitDivideUlps(t *testing.T) {
+	x := NewXoro(1)
+
+	const rounds int = 1e9
+	const scale = 0x1p-63 * (1 - 0x1p-53) 
+	for i := 0; i < rounds; i++ {
+		k := x.Uint64() >> 1
+		f1 := float64(k) / (1<<63)
+		f2 := float64(k) * scale
+		ulps := ulpsBetween(f1, f2)
+		if ulps == 1 {
+			continue
+		}
+		t.Logf("Upls not 1: f1-f2  %v", f1-f2)
+		t.Logf("Ulps %v", ulps)
+		t.Logf("F1=  %v", f1)
+		t.Fatalf("F2=  %v", f2)
+	}
+}
 // ----------------------------------------------------------Float64_64
 func Test_64_64Distribution(t *testing.T) {
 
-	var rounds int = 1e8
+	const rounds int = 1e8
 	x := NewXoro(2)
 	
 	for i := 0; i < rounds; i++ {
@@ -639,7 +789,7 @@ func Test_64_64RSpacing(t *testing.T) {
 	}
 }
 
-// set const twistedUint64 = true for following 6
+// set const twistedUint64 = true for following 
 func Test_64_64Div(t *testing.T) {
 	var rounds int = 1e8 
 	x1 := NewXoro(1)
@@ -737,15 +887,16 @@ func Test_64R_Bisect(t *testing.T) {
 	}
 }
 
-// -----------------------------------------Float64_117
-// set const twistedUint64 = true for following 2
+// ---------------------------------------------------------Float64_117
+// set const twistedUint64 = true for following 
 func Test_117_Bisect(t *testing.T) {
-	var rounds int = 1e7
+	var rounds int = 1e8
 	x1 := NewXoro(2)
 	for i := 0; i < rounds; i++ {
 		x2 := x1
 		f1 := x1.Float64_117() 
-		f2 := x2.Float64Bisect(false)
+		// f2 := x2.Float64Bisect(false)
+		f2 := x2.Float64full()
 		if f1 == f2 {
 			continue
         }
@@ -760,12 +911,13 @@ func Test_117_Bisect(t *testing.T) {
 	}
 }
 func Test_117R_Bisect(t *testing.T) {
-	var rounds int = 1e7
+	var rounds int = 1e8
 	x1 := NewXoro(2)
 	x2 := x1
 	for i := 0; i < rounds; i++ {
 		f1 := x1.Float64_117R() 
-		f2 := x2.Float64Bisect(true)
+		// f2 := x2.Float64Bisect(true)
+		f2 := x2.Float64fullR()
 		x2 = x1
 		if f1 == f2  {
 			continue
@@ -779,7 +931,7 @@ func Test_117R_Bisect(t *testing.T) {
 		t.Fatalf("F2=  %v", f2)
 	}
 }
-// ------------------------------------------Float64full
+// ----------------------------------------------------Float64full
 func Test_64fullSingles(t *testing.T) {
 	var hi, lo uint64
 	rounds := 15   // !!!!!!!!!
@@ -802,7 +954,7 @@ func Test_64fullSingles(t *testing.T) {
 
 // set const twistedUint64 = true for following 2
 func Test_64full_Bisect(t *testing.T) {
-	var rounds int = 1e7
+	var rounds int = 1e7 * 2
 	x1 := NewXoro(1)
 	for i := 0; i < rounds; i++ {
 		x2 := x1
@@ -820,7 +972,7 @@ func Test_64full_Bisect(t *testing.T) {
 }
 
 func Test_64fullR_Bisect(t *testing.T) {
-	var rounds int = 1e7 
+	var rounds int = 1e7 * 2
 	x1 := NewXoro(1)
 	for i := 0; i < rounds; i++ {
 		x2 := x1
@@ -837,9 +989,41 @@ func Test_64fullR_Bisect(t *testing.T) {
 	}
 }
 
-// --------------------------------------------RandomReal
-// set const twistedUint64 = true for following 3
-func Test_RandomRealDistribution(t *testing.T) {
+// ------------------------------------------------------RandomReal
+// set const twistedUint64 = true for following 
+func TestLdexp(t *testing.T) {
+	var rounds int = 1e8
+	x := NewXoro(1)
+	all, notsame := 0, 0
+	for i := 1; i < rounds; i++ {
+		f := x.Float64full()
+		k := i % 1080 
+		f1 := math.Ldexp(f, -k)
+		f2 := ldexp(f, uint64(k))
+		if f1 == f2  && f1 >= 0x1p-1022 {
+			continue
+		}
+		all++
+		if f1 != f2 {
+			u := ulpsBetween(f1, f2)
+			if notsame++; notsame < 20 {
+				t.Logf("F1=  %v", f1)
+				t.Logf("F2=  %v", f2)
+				t.Logf("Ulps %v", u)
+			}
+			if u > 1 {
+				t.Fatalf("ULPs > 1     %d" , u)
+			}
+			
+		}
+	}
+	t.Logf("Not same subnormals     %d" , notsame)
+	t.Logf("All subnormals          %d" , all)
+	t.Logf("Not same subnormal pros %1.8f" , 100*float64(notsame) / float64(all))
+}
+
+
+func Test_RandomReal_64fullR(t *testing.T) {
 	var rounds int = 1e8
 	x1 := NewXoro(1)
 	var even, odd, zeros, same, diff, diff2 int
@@ -848,7 +1032,7 @@ func Test_RandomRealDistribution(t *testing.T) {
 		x2 := x1
 		f1 := x1.Float64fullR() 
 		f2 := x2.RandomReal() 
-		if f1 == f2 && f1 >= 0x1.0p-1022 {
+		if f1 == f2 && f1 >= 0x1p-1022 {
 			continue
 		}
 		if f1 == f2 {
@@ -872,7 +1056,7 @@ func Test_RandomRealDistribution(t *testing.T) {
 		if f2 == 0 && f1 != 0{
 			zeros++
 		}
-		if f1 < 0x1.0p-1022 {
+		if f1 < 0x1p-1022 {
 			continue
 		}
 		t.Logf("Not same: i=%d" , i)
@@ -886,43 +1070,6 @@ func Test_RandomRealDistribution(t *testing.T) {
 	t.Logf("Same:  %d" , same)
 	t.Logf("Diff:  %d" , diff)
 	t.Logf("Diff2: %d" , diff2)
-}
-
-func Test_RandomReal_64fullR(t *testing.T) {
-	var rounds int = 1e8 
-    x1 := NewXoro(1)
-   
-	for i := 0; i < rounds; i++ {
-		x2 := x1
-		f1 := x1.Float64fullR() 
-		f2 := x2.RandomReal() 
-		if f1 == f2 || f2 == 0 {
-			continue
-		}
-		t.Logf("Not same: i=%d" , i)
-		t.Logf("Ulps %v", ulpsBetween(f1, f2))
-		t.Logf("F1=  %v", f1)
-		t.Fatalf("F2=  %v", f2)
-	}
-}
-
-func Test_RandomReal_Bisect(t *testing.T) {
-	
-	var rounds int = 1e7
-    x1 := NewXoro(1)
-    // x1 := New(1)
-	for i := 0; i < rounds; i++ {
-		x2 := x1
-		f1 := x1.RandomReal() 
-		f2 := x2.Float64Bisect(true)
-		if f1 == f2 || f1 == 0 {
-			continue
-		}
-		t.Logf("Not same: i=%d" , i)
-		t.Logf("Ulps %v", ulpsBetween(f1, f2))
-		t.Logf("F1=  %v", f1)
-		t.Fatalf("F2=  %v", f2)
-	}
 }
 
 // -----------------------------------------------------
@@ -955,56 +1102,117 @@ func Test_RoundingMethods(t *testing.T) {
 	}
 }
 
-func Test_SignificandBitsChanged(t *testing.T) {
+func TestBitsChanged(t *testing.T) {
+    const rounds int = 1e9 
+    const shift = 11
+	var sum int
+	x := NewXoro(1)
+
+	last := x.Uint64() >> shift
+	for i := 0; i < rounds; i++ {
+		n := x.Uint64() >> shift
+		sum += bits.OnesCount64(last ^ n)
+		last = n
+	}
+	ratio := float64(sum) / ((64- shift) * float64(rounds))
+	t.Logf("Ratio of changed bits  %1.9f", ratio)
+	if abs(ratio-0.5) > 0.00001 {
+		t.Errorf("Ratio failed")
+	}
+}
+func Test_1BitRatio(t *testing.T) {
     const rounds int = 1e7*4
     x := NewXoro(1)
-    // x := NewXosh(1)
-	const len = 1
+	// x := NewXosh(1)
+	const left float64 = 0x1p-64
+	const right float64 = 0x1p-12
+	const errlim = 0.005
     failed := 0
-    for bit := 52; bit >= len; bit-- {
-        sum := 0
-        last := uint64(0)
+    for bit := 51; bit >= 0; bit-- {
+		sum := 0
+		n := 0
         for i := 0; i < rounds; i++ {
-            u := math.Float64bits(x.Float64_64()) 
-            // u := math.Float64bits(x.Float64_117()) 
-			// u := math.Float64bits(x.Float64()) 
-			// u := math.Float64bits(x.RandomReal()) 
-            u &= 1<<bit - 1
-            u >>= bit - len
-            if i > 0 {
-                sum += bits.OnesCount64(last ^ u)
-            }
-            last = u
+			// f := x.Float64()
+			// f := x.Float64_64()
+			f := x.float64div64()
+			// f := x.Float64_117()
+			// f := x.Float64full()
+
+			if f < left || f >= right {
+				continue
+			}
+			n++
+			u := math.Float64bits(f) 
+ 			u >>= bit 
+			sum += int(u & 1)
         }
-        ratio := float64(sum) / (float64(len) * float64(rounds))       
-        if abs(ratio-0.5) > 0.0002 {
+        ratio := float64(sum) / float64(n)      
+        if abs(ratio-0.5) > errlim {
 			failed++
-			t.Logf("Ratio failed; bit=%d ", bit)
-            t.Logf("Ratio of changed bits  %1.9f", ratio)
-            
+			t.Logf("Ratio failed: bit %d ", bit)
+            t.Logf("Ratio of 1 bits   %1.9f", ratio)
         }
     }
     if failed > 5 {
         t.Errorf(" ")
     }
 }
+func Test_1BitRatioSingle(t *testing.T) {
+    const rounds int = 1e9
+    x := NewXoro(11)
+	// x := NewXosh(1)
+	sum := uint64(0)
+	n := 0
+	const bit = 0
+	const left float64 = 0x1p-10
+	const right float64 = 0x1p-9
+  	for i := 0; i < rounds; i++ {
+		f := x.float64div63()
+		// f := x.Float64_117()
+		// f := x.Float64_64()
+		// f := x.Float64full()
 
-func Test_1BitRatio(t *testing.T) {
+		if f < left || f >= right {
+			continue
+		}
+		n++
+		u := math.Float64bits(f)
+		u >>= bit 
+		sum += u & 1
+	}
+	ratio := float64(sum) / float64(n)      
+	t.Logf("Ratio of 1 bits  %1.9f", ratio)
+	t.Logf("n                %d", n)
+}
+
+func Test_OnesCount(t *testing.T) {
     const rounds int = 1e9
     x := NewXoro(1)
-	// x := NewXosh(1)
 	sum := 0
-	const bit = 0
-   
-	for i := 0; i < rounds; i++ {
-		u := math.Float64bits(x.Float64_64()) 
-		// u := math.Float64bits(x.Float64_117()) 
-		// u := math.Float64bits(x.Float64()) 
-		// u := math.Float64bits(x.RandomReal()) 
-		sum += bits.OnesCount64(u & (1<<bit))
+	n := 0
+	const left float64 = 0x1p-64
+	const right float64 = 0x1p-12
+
+  	for i := 0; i < rounds; i++ {
+		// f := x.Float64()
+		// f := x.Float64_64()
+		// f := x.Float64_64R()
+		f := x.float64div63()
+		// f := x.Float64_117()
+		// f := x.Float64full()
+		// f := x.RandomReal()
+		
+		if f < left || f >= right {
+			continue
+		}
+		n++
+		u := math.Float64bits(f) 
+		sum += bits.OnesCount64(u << 12)
 	}
-	ratio := float64(sum) / float64(rounds)      
-	t.Logf("Ratio of 1 bits  %1.9f", ratio)
+	ratio := float64(sum) / (52 * float64(n) )    
+	t.Logf("All over ratio of 1 bits  %1.9f", ratio)
+	t.Logf("Cases                     %d", n)
+	t.Logf("Cases pros                %2.4f", 100*float64(n)/ float64(rounds))
 }
 
 func Test_Minfloat(t *testing.T) {
@@ -1027,19 +1235,27 @@ func Test_Minfloat(t *testing.T) {
 }
 
 // set const twistedUint64 = true 
+
 func Test_Range(t *testing.T) {
-	var rounds int = 1e8
-	x1 := NewXoro(1)
-    max1, max2, min, minsame, zero := 0.0, 0.0, 1.0, 1.0, false
+	const rounds int = 1e8
+	const ulpsLim = 0x1p-1074
+	// const exact = false
+	const exact = true
+	x1 := NewXoro(11)
+	max1, max2, minNonzero, minsame, maxdiff := 0.0, 0.0, 1.0, 1.0, 0.0
+	samecnt, ulpcnt := 0, 0
+	zero, one, maxulps :=  false, false, uint64(0)
+
 	for i := 0; i < rounds; i++ {
-        x2 := x1
-        // f1 := float64(x1.Uint64() >> 11) / (1<<53)
+		x2 := x1
         // f1 := x1.float64_64Div() 
-        // f1 := x1.float64_64Tab() 
-        // f1 := x1.float64_64DivR() 
-		f1 := x1.Float64_64() 
+		// f1 := x1.float64div63()
+		// f1 := x1.float64_64Div()
+		// f1 := x1.float64div64()
+		// f1 := x1.Float64_64() 
 		// f1 := x1.Float64_64R()
-		// f1 := x1.Float64_117() 
+		f1 := x1.Float64_117() 
+		// f1 := x1.Float64_128() 
 		// f1 := x1.Float64_117R() 
 		// f1 := x1.RandomReal() 
 	
@@ -1049,14 +1265,31 @@ func Test_Range(t *testing.T) {
         // f2 := x2.Float64Bisect(true) 
         if f1 == 0 {
 			zero = true
+		}
+		if f1 == 1 {
+			one = true
         }
-        if f1 < min  && f1 != 0 {
-			min = f1
-        }
- 		if f1 == f2 {
+        if f1 < minNonzero  && f1 != 0 {
+			minNonzero = f1
+		}
+		diff := abs(f1 - f2)
+		if diff > maxdiff {
+			maxdiff = diff
+		}
+		ulps := ulpsBetween(f1, f2)
+		if ulps > maxulps && f2 > ulpsLim { 
+			maxulps = ulps
+		}
+		same := f1 == f2
+		if !exact {
+			same = ulps < 2 //&& f1 <= f2
+		}
+		if same {
+			samecnt++
 			if f1 < minsame  && f1 != 0 {
 				minsame = f1
 			}
+			if ulps == 1 { ulpcnt++	} 
  			continue
 		}
 		if f2 > max2 {
@@ -1065,22 +1298,24 @@ func Test_Range(t *testing.T) {
 		if f1 > max1 {
 			max1 = f1
         }
-     }
-	t.Logf("Range pros:      %v (of random bisection)", 100*(1 - max1))
-	t.Logf("Max1 not same:   %v" ,  max1)
-	t.Logf("                 %X" ,  math.Float64bits(max1))
-
-	t.Logf("Log2(max1):      %v" , math.Log2(max1))
-	t.Logf("Max2 not same:   %v" ,  max2)
+	}
+	t.Logf("Range pros       %2.4f (of random bisection)", 100*(1 - max1))
+	t.Logf("Max1 not same    %v" , max1)
+	t.Logf("                 %X" , math.Float64bits(max1))
+	t.Logf("Log2(max1)       %v" , math.Log2(max1))
+	t.Logf("Max2 not same    %v" , max2)
 	t.Logf("                 %X" ,  math.Float64bits(max2))
-
-	t.Logf("Log2(max2):      %v" , math.Log2(max2))
-	t.Logf("Ulps(max1, max2): %v" , ulpsBetween(max1, max2))
-	t.Logf("Min same:        %v" ,  minsame)
-    t.Logf("Log2(min same):  %v" , math.Log2(minsame))
-    t.Logf("Min non zero:    %v" ,  min)
-    t.Logf("Log2(min non z): %v" , math.Log2(min))
-    t.Logf("Zero:            %v" ,  zero)
+	t.Logf("Log2(max2)       %v" , math.Log2(max2))
+	t.Logf("1 ulp pros       %2.4f", 100*(float64(ulpcnt)/ float64(samecnt)))
+	t.Logf("Log2(maxdiff)    %v" , math.Log2(maxdiff))
+	// t.Logf("Ulps(max1, max2) %d" , ulpsBetween(max1, max2))
+	t.Logf("Max ulps         %d" , maxulps)
+	t.Logf("Min same         %v" , minsame)
+    t.Logf("Log2(min same)   %v" , math.Log2(minsame))
+    t.Logf("Min non zero     %v" , minNonzero)
+    t.Logf("Log2(min non z)  %v" , math.Log2(minNonzero))
+	t.Logf("Zero             %v" , zero)
+	t.Logf("One              %v" , one)
 }
 
 // --------------------------------------- functions for testing-------------------
@@ -1096,60 +1331,60 @@ func float64fulltest(hi, lo uint64, rounds int) float64 {
 	hi = (hi << zeros) | (lo >> (64 - zeros))
 	return float64(hi >> 11) / (1<<53) / (pow * float64(uint64(1 << zeros)))
 }
-func float64_64(u uint64) float64 {
 
+func float64_64(u uint64) float64 {
 	if u == 0 { return 0 }  
 	z := uint64(bits.LeadingZeros64(u)) + 1
 	return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
 }
-func float64_64R(u uint64) float64 {
 
+func float64_64R(u uint64) float64 {
 	if u == 0 { return 0 }
     z := uint64(bits.LeadingZeros64(u)) + 1
     return math.Float64frombits((((1023 - z) << 53 | u << z >> 11) + 1) >> 1)
-	// return math.Float64frombits((1023 - z) << 52 |  (u << z >> 11 + 1) >> 1)
 }
+
 func (x *Xoro) float64_64Div() float64 {
-
     u := x.Uint64()
-    if u == 0 { return 0 }
-    z := uint64(bits.LeadingZeros64(u))
-    return float64(u << z >> 11) / (1 << 53) / float64(uint64(1 << z))
+    // if u == 0 { return 0 }
+	z := uint64(bits.LeadingZeros64(u))
+	return float64(u << z >> 11) * twoToMinus(53 + z)
+	// return float64(u << z >> 11) / (1 << 53) / float64(uint64(1 << z))
 }
-func (x *Xoro) float64_64DivR() float64 {
 
+func (x *Xoro) float64_64DivR() float64 {
     u := x.Uint64()
     if u == 0 { return 0 }
     z := uint64(bits.LeadingZeros64(u))
     return float64((u << z >> 10 + 1) >> 1) / (1<<53) / float64(uint64(1 << z))
 }
-var scale = [12]float64 {
-	1<<53, 1<<54, 1<<55, 1<<56, 1<<57, 1<<58, 
-	1<<59, 1<<60, 1<<61, 1<<62, 1<<63,  
+var scale = [11]float64 {
+	0x1p-53, 0x1p-54, 0x1p-55, 0x1p-56, 0x1p-57, 0x1p-58, 
+	0x1p-59, 0x1p-60, 0x1p-61, 0x1p-62, 0x1p-63,  
 }
 func (x *Xoro) float64_64Tab() float64 {
-
     u := x.Uint64()
 	z := uint64(bits.LeadingZeros64(u))
 	if z <= 10 {  
-		return float64(u << z >> 11) / scale[z]  
+		return float64(u << z >> 11) * scale[z]  
 	}
-	return float64(u) / (1<<64) 
+	return float64(u) * 0x1p-64
 }
+
 func (x *Xoro) float64_64TabR() float64 {
 	
 	u := x.Uint64()
 	z := uint64(bits.LeadingZeros64(u))
 	if z <= 10 { 
-		return float64((u << z >> 10 + 1) >> 1) / scale[z]	
+		return float64((u << z >> 10 + 1) >> 1) * scale[z]	
 	}
-	return float64(u) / (1<<64) 
+	return float64(u) * 0x1p-64
 }
 func (x *Xoro) float64fullDiv() float64 {
 
 	u := x.Uint64()
 	z := uint64(bits.LeadingZeros64(u)) + 1
-	if z <= 12 {  //99.95% of cases 
+	if z <= 12 {  
 		return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
 	}
 	z--
@@ -1182,3 +1417,23 @@ func (x *Xoro) float64fullRDiv() float64 {
 	return float64((u >> 10 + 1) >> 1) / (1<<53) * twoToMinus(exp + z)
 }
 
+// float64div64 produces practically the same distribution as Float64_64R.
+func (x *Xoro) float64div64() float64 {
+
+	u := x.Uint64() //&^ 1
+	return float64(u) * 0x1p-64 
+	// f := float64(u)
+	// return (f - f * 0x1p-53)  * 0x1p-64 
+	 
+}
+
+// float64divE --
+func (x *Xoro) float64div63() float64 {
+	f := float64(x.Uint64() >> 1) * 0x1p-63
+	// f := float64((2 * (x.Uint64() >> 1) +1) >> 1) * 0x1p-63
+	// f := float64((x.Uint64()+1) >> 1) * 0x1p-63
+	if f == 1 {
+		return 1 - 0x1p-53
+	}
+	return f
+}

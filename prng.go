@@ -133,9 +133,15 @@ func (r *Prng) State() []byte {
 	return r.rng.State()
 }
 
-// SetState sets the state of the generator r from the state in b []byte.
-func (r *Prng) SetState(b []byte) {
-	r.rng.SetState(b)
+// WriteState writes the state of the generator r to b []byte.
+func (r *Prng) WriteState(b []byte) {
+	r.rng.WriteState(b)
+}
+
+// ReadState reads the state of the generator r from b []byte.
+// r.ReadState(r.State()) changes nothing.
+func (r *Prng) ReadState(b []byte) {
+	r.rng.ReadState(b)
 }
 
 // Float64 returns a uniformly distributed pseudo-random float64 from [0, 1).
@@ -338,9 +344,11 @@ func SplitmixJump(seed *uint64, jump int64) {
 // n = number of splitted parallel prng's
 // L = lenght of the random stream for each prng
 // P = full period of the prng.
+// Normal float64 arithmetic used doesn't give enough lower lim accuracy for long full periods.
 func OverlapProbability(n, L, P float64) (lower, upper float64) {
 
-	upper = n * (n - 1) * L / P
-	lower = n * (n - 1) * (L - 1) / P * (1 - n*n*L/(2*P))
+	lower = n * (n - 1) * (L - 1) / P
+	lower *= 1 - n*n*L /(2*P) 			// for big P and small n & L this is == 1
+	upper = n * (n - 1) * L / P			// this is always ok
 	return
 }
