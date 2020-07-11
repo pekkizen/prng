@@ -3,40 +3,32 @@ package prng
 import (
 	"math"
 	"math/bits"
-	"unsafe"
 )
+
 const (
 	signbit = 1<<63
-	posInf = 0x7FF0000000000000
+	posInf = 0x7ff0000000000000
 	maxUint64 = 1<<64 - 1
 )
 
 // ulpsBetween returns the distance between x and y in ULPS.
-// The distance in ULPS is the same as the difference of the ordinal 
-// numbers of x and y in the sorted sequence of all floats.
-//
+// The distance in ULPS is the same as the number of float64's between x and y + 1.
+// ulpsBetween(-Inf, +Inf) = 18437736874454810624 = 2^64 - 2^53.  2^64 = maxUint64 + 1.
 // Special cases:
-// x and/or y = +/-Inf or NaN -> ulpsBetween(x, y) = maxUint64 (2^64 - 1).
+// ulpsBetween(+/-Inf, +/-MaxFloat64) = 1
+// ulpsBetween(+/-Inf, +/-Inf)        = 0
+// ulpsBetween(x, NaN)                = maxUint64 
+// 
 func ulpsBetween(x, y float64) (u uint64) {
-
-	// uncomment if ulpsBetween(Inf, Inf) = 0 is wanted.
-	// if x == y {
-	// 	return 0
-	// }
-
-	k := *(*uint64)(unsafe.Pointer(&x)) 
-	n := *(*uint64)(unsafe.Pointer(&y)) 
-	// k := math.Float64bits(x)
-	// n := math.Float64bits(y)
-
-	diffsign := (k ^ n) & signbit != 0
+	k := math.Float64bits(x)
+	n := math.Float64bits(y)
+	signdiff := k ^ n >= 1<<63
 	k &^= signbit 
 	n &^= signbit 
-
-	switch  {
-	case k >= posInf || n >= posInf: // Infs and NaNs
+	switch {
+	case k > posInf || n > posInf:  // NaNs 
 		u = maxUint64	
-	case diffsign:
+	case signdiff:
 		u = n + k
 	case n > k:
 		u = n - k
@@ -49,147 +41,284 @@ func ulpsBetween(x, y float64) (u uint64) {
 // adjacent(x, y) returns true, if x and y are adjacent floats.
 // It is equivalent to ulpsBetween(x, y) == 1.
 // Special cases:
-// adjacent(+/-Inf, +/-MaxFloat64) = true
-// adjacent(-0, -2^-1074) = true
-// adjacent(0, 2^-1074)   = true
-// adjacent(-0, 0)        = false
-// adjacent(0, -2^-1074)  = false,  these two are the only failures this far
-// adjacent(-0, 2^-1074)  = false
+// adjacent(+Inf, +MaxFloat64) = true
+// adjacent(-Inf, -MaxFloat64) = true
+// adjacent(x, NaN)            = false
+// adjacent(-0, -2^-1074)      = true
+// adjacent(0, 2^-1074)        = true
+// adjacent(-0, 0)             = false
+// adjacent(0, -2^-1074)       = false,  these two are the only failures
+// adjacent(-0, 2^-1074)       = false
+// 2^-1074 is the smallest nonzero float64.
+// 
 func adjacent(x, y float64) bool {
-	d := int64(*(*uint64)(unsafe.Pointer(&y)) - *(*uint64)(unsafe.Pointer(&x)))
-	return d == 1 || d == -1
+	d := int64(math.Float64bits(x) - math.Float64bits(y))
+	return d == 1 || d == -1 
+
+	// d := math.Float64bits(x) - math.Float64bits(y)
+	// return d == 1 || d == maxUint64               
 }
 
 // adjacentByMean returns true, if x and y are adjacent floats.
-// It is slightly slower than adjacent but doesn't fail at zero.
-// Special cases: (differ from adjacent)
-// adjacent(+/-Inf, +/-MaxFloat64) = false
+// This is slower than adjacent but doesn't fail at zero.
+// Special cases different from func adjacent:
+// adjacentByMean(+Inf, +MaxFloat64) = false
+// adjacentByMean(-Inf, -MaxFloat64) = false
+// adjacentByMean(0, -2^-1074)       = true
+// adjacentByMean(-0, 2^-1074)       = true
+// 
 func adjacentByMean(x, y float64) bool {
-	const maxf = math.MaxFloat64 
+	const max = math.MaxFloat64 
 	if x == y {
 		return false
 	}
-	mean := x/2 + y/2	// this avoids overflowing x + y to Inf
-	return (mean == x || mean == y) && -maxf <= mean && mean <= maxf // NaN and Inf -> false
+	mean := x/2 + y/2                               // this avoids overflowing x + y to Inf
+	return (mean == x || mean == y) && -max <= mean && mean <= max // NaN and Infs -> false
 }
 
-// ulp(x) returns the ULP of x as a positive float64. The ULP is calculated as
-// the distance to the next float64 away from zero. 
-// Special cases:
-// ulp(+/-Inf) = NaN
-// ulp(NaN)    = NaN
-func ulp(x float64) float64 {
-	u := math.Float64bits(x) &^ signbit
-	exp := u >> 52
-	if exp == 0x7ff { return math.NaN() }
-	if exp > 52 {
-		return math.Float64frombits((exp - 52) << 52)
-	}
-	return math.Float64frombits(u + 1) - math.Float64frombits(u)
-}
-
-// log2Ulp(x) returns log2(ulp(x)) as an int.
+// ulp returns the ULP of x as a positive float64. 
+// ULP is calculated as the distance to the next float64 away from zero.
+// For x > 0 ulp(x) = math.Nextafter(x, math.Inf(1)) - x.
+// If x is power on two, ULP(x) towards zero is ULP(x)/2 away from zero. 
 // All ULPs are exact powers of two -> 
 // normal values have a significand = 0 and 
 // subnormal values have only a single significand bit.
 // Special cases:
-// log2Ulp(+/-Inf) = 1024, 2^1024 = +Inf 
-// log2Ulp(NaN)    = 1024
-func log2Ulp(x float64) int {
+// ulp(+/-Inf) = +Inf
+// ulp(NaN)    = NaN
+// 
+func ulp(x float64) float64 {
+	u := math.Float64bits(x) &^ signbit
+
+	// Slightly faster version but depends on adding 1's to Inf and NaN bits.
+	// ulp(+/-Inf) = NaN.
+	// ulp(+/-MaxFloat64) = +Inf.
+	// return math.Float64frombits(u + 1) - math.Float64frombits(u)
+
+	exp := u >> 52
+	switch {
+	case exp == 0x7ff:
+	case exp > 52:
+		u = (exp - 52) << 52
+	case exp > 1:
+		u = 1 << (exp - 1)
+	default:
+		u = 1                // x < 2^-2021, ULP = 2^-1074
+	}
+	return math.Float64frombits(u)  
+}
+
+// ulpFast returns the ULP of x for abs(x) > 0x1p-1022.
+// ULP is calculated towards zero.
+// Special cases:
+// ulpFast(+/-Inf) = NaN
+// ulpFast(NaN)    = NaN
+// ulpFast(0)      = 0 
+// For abs(x) <= 0x1p-1022 ulpFast fails and returns 0.
+// 
+func ulpFast(x float64) (y float64) {
+	y = x - x * (1 - 0x1p-53)  // y = x - nextToZeroFast(x)
+	if y < 0 { y = -y } 
+	return 
+	// y = x * 0x1p-53 doesn't work. Needs rounding of x * (1 - 0x1p-53).
+}
+
+// log2ulp(x) returns log2(ulp(x)) as an int.
+// Special cases:
+// log2ulp(+/-Inf) = 1024
+// log2ulp(NaN)    = 1024
+// 
+func log2ulp(x float64) int {
 	return log2pow2(ulp(x))
 }
 
 // log2pow2 return log2(x) as an int. If x is an integer power log2pow2(2^n) = n.
 // Special cases:
-// log2pow2(2^n.ddd..) = n    (truncated value for non integer powers)
+// log2pow2(2^n.ddd..) = n (truncated value for non integer powers)
 // log2pow2(+/-Inf)    = 1024
 // log2pow2(NaN)       = 1024
+// log2pow2(-x)        = log2pow2(x)
+// 
 func log2pow2(x float64) int {
-	u := math.Float64bits(x)
-	exp := int(u >> 52)
-	if exp == 0 {                    // u is subnormal significand
-		return bits.Len64(u) - 1075  // Len64(u=2^n) = n + 1, n = 0 - 51
-	}
-	return exp - 1023
-}
-
-// ulpFloat(x) returns the ULP of x for all normal floats abs(x) > 0x1p-2022.
-// See nextToZeroFloat for x * (1 - 0x1p-53)
-// Special cases:
-// ulpFloat(+/-Inf) = +/-Inf
-// ulpFloat(NaN)    = NaN
-// For abs(x) <= 0x1p-2022 ulpFloat fails and returns 0.
-func ulpFloat(x float64) (y float64) {
-	y = x - x * (1 - 0x1p-53)
-	// y = x * 0x1p-53  // doesn't work. Needs rounding of x * (1 - 0x1p-53).
-	if y < 0 { y = -y } 
-	return 
-}
-
-// isPowerOfTwo returns true if float64 x is integer power of two, x = 2^n.
-func isPowerOfTwo(x float64) (is bool) {
 	u := math.Float64bits(x) &^ signbit
 	exp := int(u >> 52)
-	sig := u &^ (0x7ff << 52)
-	switch {
-	case exp == 0x7ff || u == 0:
-		is = false
-	case sig > 0 && exp > 0:	
-		is = false
-	case sig == 0:	                            // normal floats					
-		is = true								// sig = 0 and exp > 0	
-	case sig & (sig - 1) == 0:	                // subnormal floats					
-		is = true								// exp = 0 and sig is power of two
+	if exp == 0 {                        // x is subnormal 
+		return bits.Len64(u) - 1075      // Len64(u = 2^n) = n + 1, n = 0 - 51
 	}
-	return 
+	return exp - 1023                    // x is normal
+}
+
+// isPowerOfTwo returns true if float64 x is an integer power of two, x = 2^n.
+// Cases of interest:
+// isPowerOfTwo(1)      = true
+// isPowerOfTwo(-1)     = false
+// isPowerOfTwo(0)      = false
+// isPowerOfTwo(+/-Inf) = false
+// isPowerOfTwo(NaN)    = false
+// 
+func isPowerOfTwo(x float64) bool {
+	s := math.Float64bits(x) 
+	e := s >> 52                  // sign bit + 11 exponent bits
+	s <<= 12                      // 52 significand bits + zeros
+	return s & (s - 1) == 0 && ((s > 0) != (e > 0)) && e < 0x7ff
+
+	// A float64 value x is a power of two if the following conditions are met:
+	//   s & (s - 1) == 0     -> significand is zero or power of two
+	//   (s > 0) != (e > 0)   -> significand or exponent is zero, but not both
+	//   e < 0x7ff            -> x is not +/-Inf, NaN or negative
+
+	// This is an equivalent equally fast version.
+	// switch {
+	// case s & (s - 1) > 0:
+	// case (s > 0) == (e > 0):	
+	// case e >= 0x7ff:
+	// default:               	
+	// 	return true
+	// }
+	// return false
+}
+
+// https://stackoverflow.com/questions/27566187/code-for-check-if-double-is-a-power-of-2-without-bit-manipulation-in-c
+// This is without bit operations and seems to work, but is slower
+// func isPowerOfTwo(x float64) bool { 
+//     return x > 0 && math.FMA(0x1.0p-51/x, x, -0x1.0p-51) == 0 
+// }
+
+// Java DoubleUtils.isPowerOfTwo(double x) from com.google.common.math.
+// https://www.codota.com/code/java/classes/com.romainpiel.guava.math.DoubleUtils
+// This checks twice both x > 0 and isFinite(x).
+// 
+// public static boolean isPowerOfTwo(double x) {
+//  return x > 0.0 && isFinite(x) && LongMath.isPowerOfTwo(getSignificand(x));
+// }
+// public static boolean isPowerOfTwo(long x) {
+//     return x > 0 & (x & (x - 1)) == 0;
+// }
+// DoubleUtils.getSignificand(...)
+// static long getSignificand(double d) {
+//  checkArgument(isFinite(d), "not a normal value");
+//  int exponent = getExponent(d);
+//  long bits = doubleToRawLongBits(d);
+//  bits &= SIGNIFICAND_MASK;
+//  return (exponent == MIN_EXPONENT - 1)
+//    ? bits << 1
+//    : bits | IMPLICIT_BIT;
+// }
+// public boolean isInfinite() {
+//   return Float.isInfinite(value);
+// }
+ 
+// isPowerOfTwoJava implements DoubleUtils.isPowerOfTwo. 
+// The bare algorithm with the same functionality.
+// This small and simple function is still ~60% slower than isPowerOfTwo above.
+// 
+func isPowerOfTwoJava(x float64) bool {
+	bits := math.Float64bits(x)     // bits = doubleToRawLongBits(x)
+	exp := bits >> 52               // exponent = getExponent(x) 
+	bits &= 1<<53 - 1               // bits &= SIGNIFICAND_MASK
+	if exp > 0  {                   // not (exponent == MIN_EXPONENT - 1)
+		bits |= 1<<52               // bits | IMPLICIT_BIT (this is the point in the algorithm)
+	}
+	return bits & (bits - 1) == 0 && bits > 0 && exp < 0x7ff // isPowerOfTwo(bits) & isFinite(x) & x > 0.
+
+	// Java implementation's call/dependancy tree:
+	// DoubleUtils.isPowerOfTwo
+    //     isFinite
+    //        Float.isInfinite
+    //     LongMath.isPowerOfTwo
+    //     getSignificand
+    //         checkArgument
+    //             isFinite
+    //         getExponent
+    //         doubleToRawLongBits
+    //         SIGNIFICAND_MASK
+    //         MIN_EXPONENT
+    //         IMPLICIT_BIT
 }
 
 func isInf(x float64) bool {
-	return *(*uint64)(unsafe.Pointer(&x)) &^ signbit == posInf
+	// return -math.MaxFloat64 < x && x > math.MaxFloat64
+	return math.Float64bits(x) &^ signbit == posInf
 }
 
-func isInfOrNaN(x float64) bool {
-	return *(*uint64)(unsafe.Pointer(&x)) &^ signbit >= posInf
+func isFinite(x float64) bool {
+	return math.Float64bits(x) &^ signbit < posInf
 }
 
 func isNaN(x float64) bool {
-	return *(*uint64)(unsafe.Pointer(&x)) &^ signbit > posInf
+	// return math.Float64bits(x) &^ signbit > posInf
+	return x != x
 }
 
 // nextToZero returns the next float64 after x towards zero.
+// 
 // nextToZero(x) is equivalent to math.Nextafter(x, 0)
+// Special cases:
+// nextToZero(+/-Inf) = +/-MaxFloat64 
+// nextToZero(NaN)    = NaN
+// nextToZero(0)      = 0
+// nextToZero(-0)     = -0
+// 
 func nextToZero(x float64) float64 {
 	u := math.Float64bits(x)
 	if u &^ signbit > posInf || x == 0 { return x }  // NaNs and 0
 	return math.Float64frombits(u - 1)
 }
 
-// nextToZeroFloat is equivalent to nextToZero for floats x in 
-// (2^-2022, Maxfloat64]. In (0, 2^-2022] nextToZeroFloat fails and return x.
-// Constant 1 - 0x1p-53 converts to the next float from 1 towards zero. 
-// Float64bits(1):           3FF0000000000000.
-// Float64bits(1 - 0x1p-53): 3FEFFFFFFFFFFFFF.
-func nextToZeroFloat(x float64) (y float64) {
-	return x * (1 - 0x1p-53)
-}
-
 // nextFromZero returns the next float64 after x away from zero.
-// nextFromZero(x) is equivalent to math.Nextafter(+/-x, math.Inf(1/-1))
+// 
+// nextFromZero(+/-abs(x) is equivalent to math.Nextafter(+/-abs(x), math.Inf(1/-1)).
+// Special cases:
+// nextFromZero(+/-Inf) = +/-Inf  
+// nextFromZero(NaN)    = NaN
+// 
 func nextFromZero(x float64) float64 {
 	u := math.Float64bits(x)
 	if u &^ signbit >= posInf { return x }  // NaNs and +/-Inf
 	return math.Float64frombits(u + 1)
+
+	// For a very fast function use the code line below if nextFromZero(Inf) = NaN
+	// is ok and mixing NaNs (quiet and signaling) is no problem.
+	// 
+	// return math.Float64frombits(math.Float64bits(x) + 1)
+	// 
+	// This returns a NaN with a bit representation increased by 1.
+	// amd64 CPU/Go seems to take as NaN any bit representation greater than 
+	// +Inf = 0x7FF0000000000000, e.g 0x7FF0000000000001 is handled as a NaN
+	// in computations. If the CPU produces a NaN, it is in the 
+	// standard (quiet NaN) format     0x7FF8000000000001.
+	// nextFromZero(NaN) returns bits  0x7FF8000000000002.
+	// nextFromZero(+Inf) returns bits 0x7FF0000000000001.
 }
 
-// float64Random() returns random float64's from [-MaxFloat64, MaxFloat64].
-// Every float has the same probability ~2^-63.999. 64-bit values with eleven 
+// nextToZeroFast is equivalent to nextToZero for floats abs(x) > 2^-1022. 
+// In (0, 2^-1022] nextToZeroFast(x) fails and returns x.
+// Constant 1 - 0x1p-53 converts exactly to the next float64 from 1 towards zero. 
+// Value 0x1p-53 is called machine epsilon.
+// Float64bits(1):           3FF0000000000000.
+// Float64bits(1 - 0x1p-53): 3FEFFFFFFFFFFFFF.
+// Float64bits(1 + 0x1p-53): 3FF0000000000000.
+// Float64bits(1 + 0x1p-52): 3FF0000000000001.
+// Going away from zero needs more complicated formula than x * (1 + 0x1p-52)
+// 
+func nextToZeroFast(x float64) float64 {
+	return x * (1 - 0x1p-53)
+}
+
+// randomFloat64() returns random float64's from [-MaxFloat64, MaxFloat64].
+// 
+// Every float has the same probability ~2^-63.999. 64 bits of a random uint64
+// are used as such for the float64 returned. 64-bit values with eleven 
 // '1' bits (7ff) in the exponent part are the only not valid float64 bit 
-// representations.
-func (x *Xoro) float64Random() float64 {
+// representations. In the case of eleven exponent '1' bits a new random
+// uint64 is taken. 
+// 
+func (x *Xoro) randomFloat64() float64 {
+	const expmask = 0x7ff << 52
 	again:
 	u := x.Uint64()
-	if u & (0x7ff << 52) == (0x7ff << 52) {  
-		goto again                        // resample 1/2048 of cases
+	if u & expmask == expmask {  
+		goto again                  // resample, 1/2048 of cases
 	}
 	return math.Float64frombits(u)
 }
