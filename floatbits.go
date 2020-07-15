@@ -87,8 +87,7 @@ func adjacentFP(x, y float64) bool {
 
 // ulp returns the ULP of x as a positive float64. 
 // 
-// A ULP returned is the distance to the next float64 away from zero,
-// which also means that two floats with a same exponent have a same ULP.
+// A ULP returned is the distance to the next float64 away from zero.
 // If x is a power on two, ULP(x) towards zero is ULP(x)/2 away from zero. 
 // All ULPs are exact powers of two -> 
 //   normal values have a significand = 0 and 
@@ -112,6 +111,7 @@ func ulp(x float64) float64 {
 	return math.Float64frombits(u)  
 }
 // logUlp returns log2(ulp(x)) as an int, ulp(x) = 2^logUlp(x).
+// All ulps are powers of two.
 // Special cases:
 // logUlp(+/-Inf) = 1024    (2^1024 = +Inf)
 // logUlp(NaN)    = 1024
@@ -190,25 +190,31 @@ func isPowerOfTwo(x float64) bool {
 	e := math.Float64bits(x) >> 52            // sign bit + 11 exponent bits                   
 	return ((s > 0) != (e > 0)) && e < 0x7ff
 
-	// A float64 value x is a power of two if and only if the following 
-	// conditions are met:
-	//     s & (s - 1) == 0     -> significand is zero or power of two
-	//     (s > 0) != (e > 0)   -> significand or exponent is zero, but not both
-	//     e < 0x7ff            -> x is not +/-Inf, NaN or negative
-	// Above e > 0 is true for a negative x, but the last condition drops this out.
-
-	// An "prettier" but ~25% (0.16 ns) slower equivalent function.
-	// s := math.Float64bits(x) 
-	// e := s >> 52                                               
-	// s <<= 12                                    
-	// return s & (s - 1) == 0 && ((s > 0) != (e > 0)) && e < 0x7ff
-
-	// s <<= 12 is faster than masking s &= (1<<52)-1 !? 
-	// The position of the bits is not relevant here.
+	// See comments after isPowerOfTwoCute
 }
+
+// isPowerOfTwoBella is an equivalent  function to isPowerOfTwo, 
+// In my eye its code looks nicer, but it is ~25% (0.16 ns) slower..
+// 
+func isPowerOfTwoBella(x float64) bool {
+	s := math.Float64bits(x) 
+	e := s >> 52                                // sign bit + 11 exponent bits                                                
+	s <<= 12                                    // 52 significand bits + zeros 
+	return s & (s - 1) == 0 && ((s > 0) != (e > 0)) && e < 0x7ff
+}
+// A float64 value x is a power of two if and only if the following 
+// conditions are met:
+//     s & (s - 1) == 0     -> significand is zero or power of two
+//     (s > 0) != (e > 0)   -> significand or exponent is zero, but not both
+//     e < 0x7ff            -> x is not +/-Inf, NaN or negative
+
+// Above e > 0 is true for a negative x, but the last condition drops this out.
+// s <<= 12 is faster than masking s &= (1<<52)-1 ? 
+// The position of the bits is not relevant here.
 
 // https://stackoverflow.com/questions/27566187/code-for-check-if-double-is-a-power-of-2-without-bit-manipulation-in-c
 // This is without bit operations and seems to work, but is over 50% slower than isPowerOfTwo
+// 
 func isPowerOfTwoFP(x float64) bool { 
 	return x > 0 && math.FMA(0x1.0p-51/x, x, -0x1.0p-51) == 0 
 	// return x > 0 && 0x1.0p-51/x * x - 0x1.0p-51 == 0 // doesn't work
@@ -249,7 +255,7 @@ func isPowerOfTwoFP(x float64) bool {
 	
 // isPowerOfTwoJava implements DoubleUtils.isPowerOfTwo. 
 // The bare algorithm with the same functionality.
-// This small and simple function is still over 50% slower than isPowerOfTwo above.
+// This small and simple function is still over 60% slower than isPowerOfTwo above.
 // 
 func isPowerOfTwoJava(x float64) bool {
 	bits := math.Float64bits(x)     // bits = doubleToRawLongBits(x)
@@ -261,17 +267,17 @@ func isPowerOfTwoJava(x float64) bool {
 	return bits & (bits - 1) == 0 && bits > 0 && exp < 0x7ff // isPowerOfTwo(bits) & isFinite(x) & x > 0.
 }
 
+// isInf(x) == math.IsInf(x, 0)
 func isInf(x float64) bool {
-	// return x < -math.MaxFloat64 || x > math.MaxFloat64
-	return math.Float64bits(x) &^ signbit == posInf
+	return math.Float64bits(x) << 1 == posInf << 1
 }
 
+// isFinite(x) == !math.IsNaN(f) && !math.IsInf(f, 0)
 func isFinite(x float64) bool {
-	return math.Float64bits(x) &^ signbit < posInf
+	return math.Float64bits(x) << 1 < posInf << 1
 }
-
+// isNaN is a copy of math.IsNaN
 func isNaN(x float64) bool {
-	// return math.Float64bits(x) &^ signbit > posInf
 	return x != x
 }
 
@@ -286,7 +292,7 @@ func isNaN(x float64) bool {
 // 
 func nextToZero(x float64) float64 {
 	u := math.Float64bits(x)
-	if u << 1 == 0 { return 0 }  // this is faster than if x == 0
+	if u << 1 == 0 { return 0 }  
 	// if u &^ signbit > posInf || x == 0 { return x }  // NaNs and 0
 	return math.Float64frombits(u - 1)
 }
@@ -314,16 +320,9 @@ func nextToZeroFP(x float64) float64 {
 // nextFromZero(NaN)    = NaN
 // 
 func nextFromZero(x float64) float64 {
-	// u := math.Float64bits(x)
-	// if u &^ signbit >= posInf { return x }  // NaNs and +/-Inf
-	// return math.Float64frombits(u + 1)
+	
 	return math.Float64frombits(math.Float64bits(x) + 1)
 
-	// For a very fast function use the code line below if nextFromZero(Inf) = NaN
-	// is ok and mixing NaNs (quiet and signaling) is no problem.
-	// 
-	// return math.Float64frombits(math.Float64bits(x) + 1)
-	// 
 	// This returns a NaN with a bit representation increased by 1.
 	// amd64 CPU/Go seems to take as NaN any bit representation greater than 
 	// +Inf = 0x7FF0000000000000, e.g 0x7FF0000000000001 is handled as a NaN
@@ -331,8 +330,9 @@ func nextFromZero(x float64) float64 {
 	// standard (quiet NaN) format     0x7FF8000000000001.
 	// nextFromZero(NaN) returns bits  0x7FF8000000000002.
 	// nextFromZero(+Inf) returns bits 0x7FF0000000000001.
+
+	// This is a version, which explicitely checks Infs and NaN.
+	// u := math.Float64bits(x)
+	// if u &^ signbit >= posInf { return x }  // NaNs and +/-Inf
+	// return math.Float64frombits(u + 1)
 }
-
-
-
-
