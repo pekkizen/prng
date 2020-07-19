@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"testing"
 	"math"
+	. "github.com/pekkizen/fbits"
 
 	"github.com/MichaelTJones/pcg"
 	exprand "github.com/golang/exp/rand"
@@ -13,9 +14,10 @@ import (
 )
 
 var usink uint64
-var fsink float64
+var fsink = math.Inf(1)
 var isink int
-var bsink []byte
+var bytesink []byte
+var bsink bool
 
 // baseline128 is for benchmarking minimal 128-bit state generator.
 func (x *Xoro) baseline128() uint64 {
@@ -158,8 +160,7 @@ func BenchmarkReadState(b *testing.B) {
 func BenchmarkBitsLeadingZeros(b *testing.B) {
 	var zeros uint64
 	for n := 0; n < b.N; n++ {
-		// zeros = uint64(n) * ((1<<50) - 1)
-		zeros = uint64(bits.LeadingZeros64(uint64(n) * ((1<<50) - 1)))
+		zeros = uint64(bits.LeadingZeros64(uint64(n + (1 << 62)) ))
 	}
 	usink = zeros
 }
@@ -171,62 +172,13 @@ func BenchmarkBitsRotateleft(b *testing.B) {
 	}
 	usink = u
 }
-func BenchmarkUlpsBetween(b *testing.B) {
-	var u uint64
-	f1 := float64(0x1p-1000)
-	f2 := 0.0
-	for n := 0; n < b.N; n++ {
-		f2 = f1
-		f1 += 0x1p-50
-		// u = uint64(n)
-		u = ulpsBetween(f1, f2)
-	}
-	fsink = f2
-	usink = u
-}
-func BenchmarkAdjacent(b *testing.B) {
-	var bo bool
-	f1 := float64(0x1p-50)
-	for n := 0; n < b.N; n++ {
-		f2 := f1
-		f1 += 0x1p-50
-		bo = adjacent(f1, f2)
-		// bo = adjacentByMean(f1, f2)
-	}
-	if bo {
-		usink = 1
-	}
-	
-}
-
-func BenchmarkNextToZero(b *testing.B) {
-	f := float64(0x1p-2)
-	for n := 0; n < b.N; n++ {
-		// f = nextToZero(f)
-		f = nextToZeroFast(f)
-		// f = math.Nextafter(f, 0)
-	}
-	fsink = f
-}
-
-func BenchmarkNextFromZero(b *testing.B) {
-	f := float64(0x1p-1060)
-	for n := 0; n < b.N; n++ {
-		// f = nextFromZero(f)
-		f = math.Nextafter(f, 1e308)
-		// f++
-	}
-	fsink = f
-}
-
 func BenchmarkLdexp(b *testing.B) {
-	var y float64
-	const f float64 = 0x9e3779b97f4a7c15
+	var f, y float64
+	f = 0x9e3779b97f4a7c15
 	for n := 0; n < b.N; n++ {
 		// y = f * twoToMinus(uint64(n) & 255)
 		y = ldexp(f, uint64(n) & 255)
 		// y = math.Ldexp(f, -int(uint64(n) & 255))
-		// y++
 	}
 	fsink = y
 }
@@ -294,9 +246,9 @@ func BenchmarkNextPrng(b *testing.B) {
 func BenchmarkFloat64Conversion(b *testing.B) {
 	var y float64
 	// var u uint64
-	x := NewXoro(1)
+	state := uint64(1)
 	for n := 0; n < b.N; n++ {
-		y = x.float64Random()
+		y = RandomFloat64(&state)
 		// y = float64(x.Uint64() &^ (1<<63))		// 1.34 ns
 		// y = float64(x.Uint64() >> 1)				// 1.34 ns
 		// y = float64(x.Uint64() | (1<<63))		// 1.80 ns
@@ -305,6 +257,7 @@ func BenchmarkFloat64Conversion(b *testing.B) {
 	fsink = y
 }
 
+
 func BenchmarkFloat64_64(b *testing.B) {
 	var y float64
 	x := NewXoro(1)
@@ -312,9 +265,15 @@ func BenchmarkFloat64_64(b *testing.B) {
 	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
 		// y = float64_64(x.Uint64())
-		// y = x.Float64_64()
+		y = x.Float64_64()
+		// u := x.Uint64()
+		// if u == 0 { u = 1}  // without this the smallest returned is 2^-65
+		// // z := uint64(bits.LeadingZeros64(u)) + 1
+		// z := uint64(65 - bits.Len64(u)) 
+		// // z := uint64(1)
+		// y = math.Float64frombits((1023 - z) << 52 | u << z >> 12)
 		// y = x.float64_64Div()
-		y = x.float64_64Tab()
+		// y = x.float64_64Tab()
 		// y = x.Float64_64R()
 	}
 	fsink = y
@@ -325,8 +284,8 @@ func BenchmarkFloat64full(b *testing.B) {
 	x := NewXoro(1)
 	// x := NewXosh(1)
 	for n := 0; n < b.N; n++ {
-		// y = x.Float64full()
-		y = x.Float64_128()
+		y = x.Float64full()
+		// y = x.Float64_128()
 		// y = x.Float64fullR()
 		// y = x.float64fullDiv()
 	}
@@ -367,6 +326,8 @@ func BenchmarkFloat64Xoro(b *testing.B) {
 	for n := 0; n < b.N; n++ {
 		y = x.Float64()
 		// y = x.float64div63()
+		// y = float64(x.Xoroshiro128plus() >> 11) * 0x1p-53
+		// x = x.NextState()
 	}
 	fsink = y
 }
