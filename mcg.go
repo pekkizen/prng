@@ -91,11 +91,11 @@ func (x *MCG) Float64() (next float64) {
 // Float64_64 returns a uniformly distributed pseudo-random float64 from [0, 1).
 // The distribution includes all floats in [2^-12, 1) and 2^52 evenly spaced 
 // floats in [0, 2^-12) with spacing 2^-64.
+// This function inlines ok.
 // 
 func (x *MCG) Float64_64() float64 {
 	u := x.Uint64()
 	if u == 0 { return 0 }  // without this the smallest returned is 2^-65
 	z := uint64(bits.LeadingZeros64(u)) + 1
-	// z := uint64(65 - bits.Len64(u))
 	return math.Float64frombits((1023 - z) << 52 | u << z >> 12)
 }
